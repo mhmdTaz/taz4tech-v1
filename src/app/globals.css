@@ -16,7 +16,10 @@
 
   --color-ink: #e8ebf2;
   --color-muted: #8b93a7;
-  --color-faint: #5b6478;
+  /* 4.91:1 on --color-surface. Was #5b6478 at 3.18:1, which axe caught as a
+     WCAG 2.1 AA failure on the panel heading and the loading text. Any change
+     here is checked by src/ui/palette-contrast.test.ts. */
+  --color-faint: #78829a;
 
   --color-accent: #22d3ee;
   --color-accent-dim: #0e7490;
