@@ -119,7 +119,7 @@ MONGODB_TEST_URI=mongodb://127.0.0.1:27017 pnpm test:integration
 
 ## The quality gate
 
-Eleven checks per PR (`.github/workflows/ci.yml`). Three of them exist because a
+Eleven checks per PR (`.github/workflows/ci.yml`). Four of them exist because a
 green check is not the same as a working check:
 
 - **`pnpm boundaries:verify`** plants a deliberate violation per architecture rule
@@ -136,6 +136,23 @@ green check is not the same as a working check:
 - **The integration suite carries a negative control** that asserts an unindexed
   query *does* produce a `COLLSCAN`. Without it, a plan walker returning the
   wrong shape would make every "no COLLSCAN" assertion pass vacuously.
+- **Design tokens are contrast-checked in the unit suite**
+  (`src/ui/palette-contrast.test.ts`). `--color-faint` shipped at 3.18:1 and was
+  only caught by axe five minutes into CI, inside a Playwright shard that first
+  needed a Mongo container and a Chromium download. The arithmetic needs none of
+  that and now runs in 200ms.
+
+The build artifact is deliberately **not** passed between jobs. `.next` is a
+hidden directory and `upload-artifact` skips hidden files by default — reporting
+it as a *warning*, so the build job goes green having uploaded nothing and every
+downstream job dies on a missing artifact. Each job that needs a running app
+builds its own; at ~25s in parallel that is also faster than one upload and five
+downloads.
+
+The blocking `pnpm audit` covers **production dependencies only**. The current
+high advisories are all transitive through `@lhci/cli`, which never leaves the
+runner, and one of them (`extract-zip`) has no patched version at all. A second
+non-blocking step keeps the dev findings visible rather than suppressed.
 
 ---
 
@@ -178,5 +195,10 @@ regardless of where the server runs.
   LBP 5bn threshold; advisory sources claim importers must register regardless of
   turnover, but that is not primary-sourced and needs a Lebanese tax adviser.
 - **Stryker** mutation testing on the domain layer lands in Phase 1, per the plan.
+- **Lighthouse runs the `desktop` preset**, while most Lebanese traffic is mobile
+  — the Playwright config already treats a mobile viewport as a first-class
+  target. A performance gate measuring desktop is measuring the wrong device.
+  Switching it makes the >= 95 bar substantially harder, so it is a deliberate
+  Phase 1 decision rather than a quiet change.
 
 *General information from primary sources, not legal advice.*
