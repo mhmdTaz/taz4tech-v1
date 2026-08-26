@@ -1,3 +1,4 @@
+import { FALLBACK_LOCALE, LOCALES } from '@platform/locale';
 import { defineRouting } from 'next-intl/routing';
 
 /**
@@ -9,7 +10,9 @@ import { defineRouting } from 'next-intl/routing';
  * ambiguous — a real cost given how hard the electronics vertical already is.
  */
 export const routing = defineRouting({
-  locales: ['en', 'ar', 'fr'],
-  defaultLocale: 'en',
+  // Derived, not repeated. A hardcoded list here would let the router offer a
+  // locale the rest of the system cannot render, or vice versa.
+  locales: LOCALES,
+  defaultLocale: FALLBACK_LOCALE,
   localePrefix: 'always',
 });

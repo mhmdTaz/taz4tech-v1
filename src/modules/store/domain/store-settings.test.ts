@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   createStoreSettings,
-  directionOf,
-  isLocale,
-  LOCALES,
   type StoreSettings,
   showsRegistryNumber,
   vatRate,
@@ -19,32 +16,6 @@ const valid: StoreSettings = {
   vatBasisPoints: 1100,
   commercialRegistryNumber: null,
 };
-
-describe('locales', () => {
-  it('offers exactly en, ar and fr', () => {
-    expect([...LOCALES]).toEqual(['en', 'ar', 'fr']);
-  });
-
-  it('recognises a supported locale', () => {
-    expect(isLocale('en')).toBe(true);
-    expect(isLocale('ar')).toBe(true);
-    expect(isLocale('fr')).toBe(true);
-  });
-
-  it('rejects anything else, including near-misses', () => {
-    expect(isLocale('de')).toBe(false);
-    expect(isLocale('en-US')).toBe(false);
-    expect(isLocale('')).toBe(false);
-    expect(isLocale(null)).toBe(false);
-    expect(isLocale(42)).toBe(false);
-  });
-
-  it('sets direction from the locale, so ar mirrors everywhere at once', () => {
-    expect(directionOf('ar')).toBe('rtl');
-    expect(directionOf('en')).toBe('ltr');
-    expect(directionOf('fr')).toBe('ltr');
-  });
-});
 
 describe('createStoreSettings', () => {
   it('accepts a well-formed store', () => {

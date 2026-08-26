@@ -1,5 +1,6 @@
 import { type Db, MongoClient } from 'mongodb';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { scansCollection, usesIndex, winningStages } from '@/test-support/explain';
 import type { StoreSettings } from '../domain/store-settings';
 import {
   createMongoStoreSettingsRepository,
@@ -24,25 +25,6 @@ const settings = (overrides: Partial<StoreSettings> = {}): StoreSettings => ({
   commercialRegistryNumber: null,
   ...overrides,
 });
-
-/**
- * Every `stage` name anywhere in an explain plan.
- *
- * Deliberately walks EVERY nested value rather than the known plan keys
- * (`winningPlan`, `inputStage`, `inputStages`, `queryPlan`). Those keys differ
- * between the classic engine, SBE, and MongoDB versions — a walker that lists
- * them returns an empty array on an unfamiliar shape, and an empty array
- * silently satisfies "does not contain COLLSCAN". The gate would pass on every
- * query, including the ones it exists to catch.
- */
-const stagesOf = (plan: unknown): string[] => {
-  if (Array.isArray(plan)) return plan.flatMap(stagesOf);
-  if (plan === null || typeof plan !== 'object') return [];
-
-  const node = plan as Record<string, unknown>;
-  const here = typeof node.stage === 'string' ? [node.stage] : [];
-  return [...here, ...Object.values(node).flatMap(stagesOf)];
-};
 
 beforeAll(async () => {
   client = new MongoClient(URI, { serverSelectionTimeoutMS: 5_000 });
@@ -121,7 +103,7 @@ describe('MongoStoreSettingsRepository', () => {
       .find({ storeId: 'taz4tech' })
       .explain('queryPlanner');
 
-    const stages = stagesOf((explained as Record<string, unknown>).queryPlanner);
+    const stages = winningStages(explained);
 
     // Guard against the walker silently returning nothing: an empty list would
     // satisfy the COLLSCAN assertion below without proving anything at all.
@@ -129,16 +111,13 @@ describe('MongoStoreSettingsRepository', () => {
 
     // The whole point of the gate: a query that works but scans the collection
     // is fine at ten documents and fatal at ten thousand.
-    expect(stages.join(','), `plan stages: ${stages.join(', ')}`).not.toContain('COLLSCAN');
+    expect(scansCollection(stages), `plan stages: ${stages.join(', ')}`).toBe(false);
 
     // Matched as a substring rather than equality: MongoDB 8 serves a
     // single-field equality on an indexed field with EXPRESS_IXSCAN, a fast path
     // that is better than a plain IXSCAN, not worse. Asserting the exact string
     // would fail on a correctly-indexed query.
-    expect(
-      stages.some((stage) => stage.includes('IXSCAN')),
-      `expected an index scan, got: ${stages.join(', ')}`,
-    ).toBe(true);
+    expect(usesIndex(stages), `expected an index scan, got: ${stages.join(', ')}`).toBe(true);
   });
 
   it('the COLLSCAN detector actually detects a collection scan', async () => {
@@ -153,7 +132,7 @@ describe('MongoStoreSettingsRepository', () => {
       .find({ name: 'Taz4Tech' }) // deliberately unindexed field
       .explain('queryPlanner');
 
-    const stages = stagesOf((explained as Record<string, unknown>).queryPlanner);
+    const stages = winningStages(explained);
     expect(stages).toContain('COLLSCAN');
   });
 
