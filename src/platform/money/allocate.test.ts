@@ -12,10 +12,7 @@ const lcg = (seed: number) => () => {
   return seed / 4294967296;
 };
 
-// SKIPPED until allocate() is implemented — see the TODO in allocate.ts.
-// Delete the `.skip` as step one; these tests already pin every invariant, so
-// they will tell you immediately whether the policy you chose handles the edges.
-describe.skip('allocate', () => {
+describe('allocate', () => {
   it('never loses or invents a cent, even when the split is not exact', () => {
     const result = allocate(usd(1000), [1000, 1000, 1000]);
     expect(total(result)).toBe(1000);
@@ -54,6 +51,45 @@ describe.skip('allocate', () => {
   it('allocates proportionally, not equally', () => {
     const result = allocate(usd(1000), [750, 250]);
     expect(result).toEqual([750, 250]);
+  });
+
+  it('gives the leftover cent to the most short-changed line, not to the first', () => {
+    // Exact shares are 5.00, 3.33, 1.67. Line 2 lost the most to truncation, so
+    // it receives the leftover cent. A first-line-absorbs policy would return
+    // [6, 3, 1] here — this assertion is what pins the policy down.
+    expect(allocate(usd(10), [3, 2, 1])).toEqual([5, 3, 2]);
+  });
+
+  it('breaks a tie by line order, so equal fractions are not order-dependent', () => {
+    // Exact shares are 3.33 each: all three lost the same to truncation, so the
+    // single leftover cent goes to the earliest line rather than an arbitrary one.
+    expect(allocate(usd(1000), [1000, 1000, 1000])).toEqual([334, 333, 333]);
+  });
+
+  it('spreads several leftover cents across distinct lines, one each', () => {
+    // 6 lines, exact share 1.67 apiece: four leftover cents, four different lines.
+    expect(allocate(usd(10), [1, 1, 1, 1, 1, 1])).toEqual([2, 2, 2, 2, 1, 1]);
+  });
+
+  it('never puts a line more than one cent off its exact share', () => {
+    // This is the property that justified largest-remainder over the simpler
+    // policies, so it is asserted rather than assumed.
+    const rand = lcg(4242);
+    for (let i = 0; i < 1000; i++) {
+      const weights = Array.from({ length: 2 + Math.floor(rand() * 6) }, () =>
+        Math.floor(rand() * 9_000),
+      );
+      const totalWeight = total(weights);
+      if (totalWeight === 0) continue;
+
+      const amount = Math.floor(rand() * 100_000) - 50_000;
+      const result = allocate(usd(amount), weights);
+
+      result.forEach((cents, line) => {
+        const exact = (amount * (weights[line] ?? 0)) / totalWeight;
+        expect(Math.abs(cents - exact)).toBeLessThan(1);
+      });
+    }
   });
 
   it('is deterministic — the same cart allocates identically every time', () => {

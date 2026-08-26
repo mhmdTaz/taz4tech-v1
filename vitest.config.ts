@@ -60,9 +60,6 @@ export default defineConfig({
         // guards them is the integration suite's explain() assertion that
         // rejects a COLLSCAN.
         'src/modules/**/infrastructure/**',
-        // Awaiting an implementation decision; excluded so an unwritten function
-        // cannot quietly drag the platform threshold down and mask a real gap.
-        'src/platform/money/allocate.ts',
         'src/**/*.d.ts',
       ],
       /**
