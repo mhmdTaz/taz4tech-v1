@@ -1,0 +1,55 @@
+{
+  "name": "taz4tech",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=24.11.0 <25"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "boundaries": "depcruise src --config .dependency-cruiser.cjs",
+    "boundaries:graph": "depcruise src --config .dependency-cruiser.cjs --output-type dot",
+    "test": "vitest run --project unit",
+    "test:watch": "vitest --project unit",
+    "test:unit": "vitest run --project unit --coverage",
+    "test:integration": "vitest run --project integration",
+    "test:e2e": "playwright test",
+    "verify": "pnpm typecheck && pnpm lint && pnpm boundaries && pnpm boundaries:verify && pnpm test:unit",
+    "seed": "tsx scripts/seed.ts",
+    "test:e2e:ui": "playwright test --ui",
+    "bundle:budget": "node scripts/check-bundle-budget.mjs",
+    "boundaries:verify": "node scripts/verify-boundary-rules.mjs"
+  },
+  "dependencies": {
+    "mongodb": "^7.6.0",
+    "next": "16.3.3",
+    "next-intl": "^4.13.7",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@biomejs/biome": "^2.5.10",
+    "@lhci/cli": "^0.15.1",
+    "@next/playwright": "16.3.3",
+    "@playwright/test": "^1.62.1",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^24.11.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "dependency-cruiser": "^18.2.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

@@ -1,0 +1,275 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+# A new push to the same PR cancels the previous run. Without this, a busy
+# afternoon queues six redundant Playwright matrices.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24.11.1'
+
+jobs:
+  # ---------------------------------------------------------------- 1, 2, 3, 4
+  static:
+    name: types · lint · boundaries · unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Biome
+        run: pnpm lint
+
+      - name: Architecture boundaries
+        # The layering is only real because this step fails the build.
+        run: pnpm boundaries
+
+      - name: Boundary rules can actually fail
+        # A rule that cannot fire looks exactly like a rule with nothing to catch.
+        # This plants a deliberate violation per rule and fails if one stays silent.
+        run: pnpm boundaries:verify
+
+      - name: Unit tests with per-directory coverage gates
+        run: pnpm test:unit
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------------- 5
+  integration:
+    name: integration (real MongoDB)
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:8.0
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MONGODB_TEST_URI: mongodb://127.0.0.1:27017
+      MONGODB_TEST_DB: taz4tech_ci
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Integration tests
+        # These assert on explain() output and fail on COLLSCAN, so a query that
+        # works but does not use an index cannot reach production unnoticed.
+        run: pnpm test:integration
+
+  # ------------------------------------------------------------------------- 6
+  build:
+    name: build · bundle budget
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+        env:
+          MONGODB_URI: mongodb://127.0.0.1:27017
+          SITE_URL: https://taz4tech.com
+
+      - name: Bundle budget
+        run: pnpm bundle:budget
+
+  # ---------------------------------------------------------------------- 7, 8
+  #
+  # These build their own copy rather than downloading one from the build job.
+  # Passing .next/ between jobs looks cheaper but is a trap: .next is a HIDDEN
+  # directory, upload-artifact skips hidden files by default, and it reports that
+  # as a WARNING — so the build job goes green having uploaded nothing and every
+  # downstream job dies on a missing artifact. Rebuilding costs ~25s, runs in
+  # parallel across shards rather than serially after an upload, and removes both
+  # the artifact round-trip and an entire class of silent failure.
+  e2e:
+    name: e2e (${{ matrix.shard }}/4) · axe
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      mongodb:
+        image: mongo:8.0
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MONGODB_URI: mongodb://127.0.0.1:27017
+      MONGODB_DB: taz4tech_e2e
+      STORE_ID: taz4tech
+      SITE_URL: http://127.0.0.1:3000
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Seed the store
+        run: pnpm seed
+
+      - name: Playwright (all locales, axe included)
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/4
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report-${{ matrix.shard }}
+          path: playwright-report/
+          retention-days: 7
+          # A failure before the tests run leaves no report; that is not itself
+          # an error, so this upload stays quiet rather than masking the real one.
+          if-no-files-found: ignore
+
+  # ------------------------------------------------------------------------- 9
+  lighthouse:
+    name: lighthouse (>= 95)
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:8.0
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MONGODB_URI: mongodb://127.0.0.1:27017
+      MONGODB_DB: taz4tech_lh
+      STORE_ID: taz4tech
+      SITE_URL: http://127.0.0.1:3000
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Seed the store
+        run: pnpm seed
+
+      - name: Lighthouse CI
+        run: pnpm exec lhci autorun
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: lighthouse-report
+          path: lighthouse-report/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ------------------------------------------------------------------------ 10
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Audit production dependencies
+        # The blocking gate covers what actually ships to customers. This is the
+        # surface an attacker can reach through the storefront.
+        run: pnpm audit --audit-level high --prod
+
+      - name: Audit dev dependencies (report only)
+        # Reported, not enforced. The current high findings are all transitive
+        # through @lhci/cli, a tool that only ever executes on this runner: `tmp`
+        # path traversal via inquirer, and `extract-zip` symlink traversal via
+        # puppeteer — which has NO patched version at all, so a blocking gate here
+        # could only be satisfied by dropping Lighthouse or pinning a lie.
+        # Forcing an override on `tmp` risks breaking the Lighthouse runner to fix
+        # a vulnerability that cannot reach production. Kept visible instead.
+        continue-on-error: true
+        run: pnpm audit --audit-level high
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v4
+
+  # A single required check to protect the branch with, so adding a job later
+  # does not mean editing branch protection by hand.
+  gate:
+    name: quality gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [static, integration, build, e2e, lighthouse, audit, codeql]
+    steps:
+      - name: Fail if any check did not succeed
+        run: |
+          echo '${{ toJSON(needs) }}'
+          if echo '${{ toJSON(needs) }}' | grep -q '"result": *"\(failure\|cancelled\)"'; then
+            echo "One or more required checks failed."
+            exit 1
+          fi
+          echo "All required checks passed."

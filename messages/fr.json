@@ -1,0 +1,18 @@
+{
+  "home": {
+    "eyebrow": "Phase 0 · squelette",
+    "title": "Taz4Tech",
+    "tagline": "L'électronique, livrée partout au Liban. Paiement à la livraison.",
+    "storeHeading": "Configuration de la boutique",
+    "loading": "Lecture des paramètres de la boutique…",
+    "notConfigured": "Cette boutique n'a pas encore été initialisée. Lancez le script d'amorçage pour créer son document de paramètres.",
+    "lookupFailed": "Impossible de lire les paramètres de la boutique.",
+    "labels": {
+      "name": "Nom",
+      "locales": "Langues",
+      "vat": "TVA",
+      "contact": "Contact",
+      "registry": "Registre du commerce"
+    }
+  }
+}

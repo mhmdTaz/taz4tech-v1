@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/*
+ * Dark premium tech — clean slate.
+ *
+ * Tailwind 4 is CSS-first: this @theme block *is* the config, and every token
+ * here becomes a utility (bg-surface, text-muted, border-hairline). Defining the
+ * palette once here rather than in a JS config is what keeps the storefront and
+ * the admin visually identical without a shared component for every element.
+ */
+@theme {
+  --color-void: #08090b;
+  --color-surface: #0f1116;
+  --color-raised: #161923;
+  --color-hairline: #232838;
+
+  --color-ink: #e8ebf2;
+  --color-muted: #8b93a7;
+  /* 4.91:1 on --color-surface. Was #5b6478 at 3.18:1, which axe caught as a
+     WCAG 2.1 AA failure on the panel heading and the loading text. Any change
+     here is checked by src/ui/palette-contrast.test.ts. */
+  --color-faint: #78829a;
+
+  --color-accent: #22d3ee;
+  --color-accent-dim: #0e7490;
+
+  --color-positive: #34d399;
+  --color-caution: #fbbf24;
+  --color-negative: #f87171;
+
+  --font-sans:
+    ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans Arabic",
+    sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+
+  --radius-panel: 14px;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-void);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Arabic sets dir="rtl" on <html>. Every layout below uses logical properties
+ * (padding-inline, margin-inline, text-start) rather than left/right, so the
+ * mirror is free — no rtl: variants sprinkled through the markup.
+ */
+[dir="rtl"] {
+  letter-spacing: 0;
+}
+
+/* Respect the OS setting rather than animating regardless. WCAG 2.1 AA. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore-start lint/complexity/noImportantStyles: this override must beat
+       every utility and inline animation on the page; without !important the
+       reduced-motion preference is silently ignored, which is a WCAG failure. */
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    /* biome-ignore-end lint/complexity/noImportantStyles: end of override */
+  }
+}

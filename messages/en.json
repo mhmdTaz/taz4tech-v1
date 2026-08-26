@@ -1,0 +1,18 @@
+{
+  "home": {
+    "eyebrow": "Phase 0 · skeleton",
+    "title": "Taz4Tech",
+    "tagline": "Electronics, delivered across Lebanon. Cash on delivery.",
+    "storeHeading": "Store configuration",
+    "loading": "Reading store settings…",
+    "notConfigured": "This store has not been seeded yet. Run the seed script to create its settings document.",
+    "lookupFailed": "Store settings could not be read.",
+    "labels": {
+      "name": "Name",
+      "locales": "Locales",
+      "vat": "VAT",
+      "contact": "Contact",
+      "registry": "Commercial registry"
+    }
+  }
+}
