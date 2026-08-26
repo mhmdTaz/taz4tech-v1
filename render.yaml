@@ -1,0 +1,47 @@
+# Render blueprint for Taz4Tech.
+#
+# Committed so the infrastructure is reviewable in a PR like any other change.
+# No secret appears here: MONGODB_URI is marked sync:false, which makes Render
+# prompt for it in the dashboard instead of reading it from this file.
+#
+# Frankfurt is the closest region Render offers to Lebanon; Atlas should be
+# created in the same region so a query does not cross a continent per request.
+#
+# Cost at launch: one Starter web service ($7) + Atlas Flex (~$8) = about $15/mo.
+# Free is not an option here — a free instance sleeps after 15 minutes and cold
+# starts in roughly 60 seconds, which loses the order rather than delaying it.
+
+services:
+  - type: web
+    name: taz4tech
+    runtime: node
+    plan: starter
+    region: frankfurt
+    branch: develop
+    autoDeploy: true
+
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: NODE_VERSION
+        value: 24.11.1
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false          # entered in the dashboard; never in git
+      - key: MONGODB_DB
+        value: taz4tech
+      - key: STORE_ID
+        value: taz4tech
+      - key: SITE_URL
+        value: https://taz4tech.com
+      - key: LOG_LEVEL
+        value: info
+
+    # Every PR gets a disposable copy of the app. This is the eleventh required
+    # check in the quality gate — the one a human actually looks at.
+    previews:
+      generation: automatic

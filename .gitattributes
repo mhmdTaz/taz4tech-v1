@@ -1,0 +1,14 @@
+# Normalise line endings in the repository. Next rewrites tsconfig.json on every
+# build and does so with CRLF on Windows; without this the file would show as
+# fully changed on every machine that touches it.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.xlsx binary
