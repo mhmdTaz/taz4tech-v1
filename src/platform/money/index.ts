@@ -38,8 +38,24 @@ export const fromCents = (cents: number, currency: Currency = USD): Result<Money
  * instead of 112. Here the fractional digits are read as characters.
  */
 export const parse = (input: string, currency: Currency = USD): Result<Money, MoneyError> => {
-  const cleaned = input.trim().replace(/[$\s,]/g, '');
-  const match = /^(-)?(\d+)(?:\.(\d{1,2}))?$/.exec(cleaned);
+  const cleaned = input.trim().replace(/[$\s]/g, '');
+
+  /*
+   * Commas are validated before they are stripped.
+   *
+   * A thousands separator is ALWAYS followed by exactly three digits, so
+   * "12,34" is not 1234 — it is a European decimal comma meaning 12.34. Reading
+   * it as a thousands separator makes the amount a hundred times too large, and
+   * a supplier price list from France would import every price 100x over. There
+   * is no safe guess, so a comma that is not a valid grouping is unparsable and
+   * the caller is told to write the amount unambiguously.
+   */
+  const commaGrouped = /^-?\d{1,3}(,\d{3})*(\.\d{1,2})?$/;
+  if (cleaned.includes(',') && !commaGrouped.test(cleaned)) {
+    return err({ tag: 'unparsable', input });
+  }
+
+  const match = /^(-)?(\d+)(?:\.(\d{1,2}))?$/.exec(cleaned.replace(/,/g, ''));
   if (match === null) return err({ tag: 'unparsable', input });
 
   const sign = match[1] === '-' ? -1 : 1;

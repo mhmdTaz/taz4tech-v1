@@ -8,6 +8,7 @@ const repository = () => {
     findBySlug: vi.fn(),
     findById: vi.fn(),
     findBySku: vi.fn(),
+    findBySlugs: vi.fn().mockResolvedValue([]),
     save: vi.fn(),
     list: vi.fn(async (query: ListProductsQuery) => {
       calls.push(query);
@@ -101,6 +102,7 @@ describe('listProducts', () => {
       findBySlug: vi.fn(),
       findById: vi.fn(),
       findBySku: vi.fn(),
+      findBySlugs: vi.fn().mockResolvedValue([]),
       save: vi.fn(),
       list: vi.fn().mockResolvedValue({ products: [], nextCursor: 'next-page' }),
     };
@@ -114,6 +116,7 @@ describe('listProducts', () => {
       findBySlug: vi.fn(),
       findById: vi.fn(),
       findBySku: vi.fn(),
+      findBySlugs: vi.fn().mockResolvedValue([]),
       save: vi.fn(),
       list: vi.fn().mockRejectedValue(new Error('connection refused')),
     };

@@ -75,6 +75,26 @@ describe('Money.parse', () => {
     if (!r.ok) expect(r.error.tag).toBe('unparsable');
   });
 
+  it.each(['12,34', '1,23', '1,2345', '1,23,456', '12,3'])(
+    'rejects %s, where the comma cannot be a thousands separator',
+    (input) => {
+      // A thousands separator is always followed by exactly three digits, so
+      // "12,34" is a European decimal comma meaning 12.34. Reading it as 1234
+      // makes the amount a hundred times too large — a supplier price list from
+      // France would import every price 100x over. There is no safe guess.
+      const r = parse(input);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error.tag).toBe('unparsable');
+    },
+  );
+
+  it.each(['1,299', '1,299.99', '12,345,678.90', '999'])(
+    'still accepts %s, where the grouping is valid',
+    (input) => {
+      expect(parse(input).ok).toBe(true);
+    },
+  );
+
   it('rejects an amount beyond safe integer range', () => {
     const r = parse('99999999999999999999');
     expect(r.ok).toBe(false);

@@ -25,11 +25,31 @@ export type ListProductsQuery = {
   readonly cursor?: string;
 };
 
+/**
+ * Reads a spreadsheet into rows of text.
+ *
+ * A port rather than a direct call, so the import engine never depends on a file
+ * format. Every cell arrives as a string — including dates, normalised to ISO by
+ * the adapter — which is what lets the engine be tested with plain arrays
+ * instead of binary fixtures nobody can review in a diff.
+ */
+export interface WorkbookReader {
+  readRows(file: Uint8Array): Promise<string[][]>;
+}
+
 export interface ProductRepository {
   findBySlug(storeId: string, slug: string): Promise<Product | null>;
   findById(storeId: string, id: ProductId): Promise<Product | null>;
   /** Lookup by any variant's SKU — the importer uses it to decide insert vs update. */
   findBySku(storeId: string, sku: string): Promise<Product | null>;
+  /**
+   * Bulk slug lookup, for the importer's create-vs-update decision.
+   *
+   * One query for four hundred slugs rather than four hundred queries. At a
+   * round trip each to Atlas, the difference is a preview that appears versus
+   * one that times out.
+   */
+  findBySlugs(storeId: string, slugs: readonly string[]): Promise<Product[]>;
   list(query: ListProductsQuery): Promise<ProductPage>;
   save(product: Product): Promise<void>;
 }

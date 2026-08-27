@@ -46,7 +46,12 @@ export const buildContainer = async (): Promise<Container> => {
   const flags = createFlags();
 
   const store = createStoreModule({ db, storeId: config.storeId });
-  const catalog = createCatalogModule({ db, storeId: config.storeId, now: () => clock.now() });
+  const catalog = createCatalogModule({
+    db,
+    storeId: config.storeId,
+    now: () => clock.now(),
+    nextId: () => ids.next(),
+  });
 
   return { config, db, clock, ids, logger, flags, store, catalog };
 };

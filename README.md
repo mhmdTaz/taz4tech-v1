@@ -104,6 +104,8 @@ through `parseFloat`, which would turn `"1.115"` into 111 cents instead of 112.
 | `pnpm test:e2e` | Playwright, all locales, axe included |
 | `pnpm bundle:budget` | Fails if client JS crosses its ceiling |
 | `pnpm seed` | Writes the store settings document |
+| `pnpm seed:demo` | Loads demo products (fixtures, never for Atlas) |
+| `pnpm import:catalogue <file.xlsx>` | Dry-run a catalogue import; add `--commit` to apply |
 
 ### Running the integration tests
 
@@ -227,6 +229,40 @@ Demo fixtures live in `pnpm seed:demo`, deliberately separate from `pnpm seed`:
 store settings are real configuration, three fake laptops are not. The fixtures
 cover the awkward shapes on purpose — an incomplete variant matrix, a live offer,
 a product with no imagery, and a draft that must stay hidden.
+
+## The Excel importer
+
+```bash
+pnpm import:catalogue catalogue.xlsx            # dry run — prints the plan, writes nothing
+pnpm import:catalogue catalogue.xlsx --commit   # applies it
+```
+
+Named `import:catalogue` rather than `import` because **`pnpm import` is a
+built-in pnpm command** — it replaces the pnpm lockfile with one imported from
+npm or yarn, and it deletes the existing lockfile before it fails.
+
+**One row is one VARIANT, not one product.** Rows sharing a slug — explicit, or
+derived from the English title — become one product with several variants, which
+is how real catalogue sheets are shaped.
+
+**Nothing is written without `--commit`.** The dry run produces exactly the plan
+a commit would apply: same parsing, same grouping, same validation. The preview
+is the truth, not a rehearsal of it.
+
+**The parsers refuse to guess.** `03/04/2026` is 3 April to a Lebanese supplier
+and 4 March to an American one, and nothing in the file says which — so it is
+rejected as *ambiguous* with its own message, rather than silently setting an
+offer expiry eight months wrong on the field consumer protection law requires to
+be accurate. Status defaults to **draft**, never active: importing four hundred
+rows must not publish four hundred products because the sheet had no status
+column.
+
+**Bad rows do not block good ones.** Three bad rows out of four hundred import
+three hundred and ninety-seven, with the three reported by Excel row number.
+
+Column detection is a starting point the operator confirms, and it resolves
+specific headers before general ones — "Compare at price" claims its column
+before "Price" does, or every Shopify export would sell at the was-price.
 
 ## Open decisions
 
