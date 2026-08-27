@@ -6,6 +6,8 @@ import { hasLocale, NextIntlClientProvider } from 'next-intl';
 import { setRequestLocale } from 'next-intl/server';
 import { routing } from '@/i18n/routing';
 import '../globals.css';
+import { Suspense } from 'react';
+import { SiteHeader } from './site-header';
 
 /**
  * Pre-render one shell per locale. Because localePrefix is 'always', these three
@@ -67,7 +69,17 @@ export default async function LocaleLayout({
   return (
     <html lang={locale} dir={directionOf(locale)}>
       <body className="min-h-dvh antialiased">
-        <NextIntlClientProvider>{children}</NextIntlClientProvider>
+        <NextIntlClientProvider>
+          {/*
+            The header reads the cart cookie, which makes it dynamic. Behind its
+            own boundary so it cannot stop a page shell from being prerendered
+            per locale — the whole reason setRequestLocale is called above.
+          */}
+          <Suspense fallback={<div className="h-[57px] border-hairline border-b bg-surface/60" />}>
+            <SiteHeader locale={locale} />
+          </Suspense>
+          <div id="content">{children}</div>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

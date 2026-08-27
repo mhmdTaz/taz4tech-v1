@@ -65,5 +65,33 @@
     "curated": "مختارة يدويًا",
     "breadcrumb": "مسار التنقّل",
     "notFoundTitle": "المجموعة غير موجودة"
+  },
+  "cart": {
+    "title": "السلة",
+    "metaTitle": "سلتك",
+    "empty": "سلتك فارغة.",
+    "continueShopping": "متابعة التسوق",
+    "subtotal": "المجموع",
+    "quantity": "الكمية",
+    "update": "تحديث",
+    "remove": "إزالة",
+    "addToCart": "أضف إلى السلة",
+    "inCart": "{count} في السلة",
+    "checkout": "إتمام الطلب",
+    "checkoutSoon": "إتمام الطلب سيتوفر في الإصدار القادم.",
+    "removedTitle": "لم يعد متوفراً",
+    "removedBody": "تمت إزالة {count} من العناصر لأنها لم تعد معروضة للبيع.",
+    "onlyLeft": "بقي {count} فقط — قلّل الكمية لإتمام الطلب.",
+    "noneLeft": "غير متوفر — احذف هذا السطر لإتمام باقي الطلب.",
+    "itemCount": "{count, plural, =0 {السلة} one {السلة، عنصر #} other {السلة، # عناصر}}",
+    "vatNote": "الأسعار تشمل الضريبة عند انطباقها. الدفع عند الاستلام في كل لبنان.",
+    "removedClear": "إزالتها"
+  },
+  "nav": {
+    "products": "المنتجات",
+    "collections": "المجموعات",
+    "home": "الرئيسية",
+    "skipToContent": "تخطَّ إلى المحتوى",
+    "primary": "التنقل الرئيسي"
   }
 }
