@@ -114,8 +114,18 @@ const run = async (formData: FormData, commit: boolean): Promise<ImportResponse>
     return { ok: false, message: 'That file could not be read as an .xlsx workbook.' };
   }
 
-  const { headers, rows, plan, written, failures, stockFailures, stockWritten, committed } =
-    result.value;
+  const {
+    headers,
+    rows,
+    plan,
+    written,
+    failures,
+    stockFailures,
+    stockWritten,
+    imageFailures,
+    imagesTaken,
+    committed,
+  } = result.value;
 
   if (committed) {
     container.logger.info('catalogue imported from the admin screen', {
@@ -142,6 +152,8 @@ const run = async (formData: FormData, commit: boolean): Promise<ImportResponse>
       failures,
       stockFailures,
       stockWritten,
+      imageFailures,
+      imagesTaken,
     }),
   };
 };

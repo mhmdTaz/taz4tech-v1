@@ -14,6 +14,7 @@
 import { type CartModule, createCartModule } from '@modules/cart';
 import { type CatalogModule, createCatalogModule, type StockWriter } from '@modules/catalog';
 import { createInventoryModule, type InventoryModule } from '@modules/inventory';
+import { createMediaModule, describeIngestFailure, type MediaModule } from '@modules/media';
 import { createOrdersModule, type OrdersModule } from '@modules/orders';
 import { createStoreModule, deliveryFeeFor, type StoreModule } from '@modules/store';
 import { type Clock, systemClock } from '@platform/clock';
@@ -34,6 +35,7 @@ export type Container = {
   readonly store: StoreModule;
   readonly catalog: CatalogModule;
   readonly inventory: InventoryModule;
+  readonly media: MediaModule;
   readonly cart: CartModule;
   readonly orders: OrdersModule;
 };
@@ -59,6 +61,8 @@ export const buildContainer = async (): Promise<Container> => {
     now: () => clock.now(),
   });
 
+  const media = createMediaModule({ db, storeId: config.storeId, now: () => clock.now() });
+
   const catalog = createCatalogModule({
     db,
     storeId: config.storeId,
@@ -71,6 +75,20 @@ export const buildContainer = async (): Promise<Container> => {
      * column; inventory knows how stock is stored. Neither imports the other —
      * the adapter lives here, which is what a composition root is for.
      */
+    /*
+     * The catalogue reads image URLs out of a spreadsheet; media knows how to
+     * fetch one, check it and store it. Neither imports the other, and the
+     * translation from media's error union into one sentence happens here — the
+     * catalogue has no business knowing the ways an image can be refused.
+     */
+    images: {
+      take: async (url: string) => {
+        const result = await media.ingestImage(url);
+        return result.ok
+          ? { ok: true as const, path: result.value.path }
+          : { ok: false as const, reason: describeIngestFailure(result.error) };
+      },
+    },
     stock: {
       setLevels: async (levels: Parameters<StockWriter['setLevels']>[0]) => {
         const failures: { sku: string; reason: string }[] = [];
@@ -172,12 +190,26 @@ export const buildContainer = async (): Promise<Container> => {
   await Promise.all([
     store.ensureIndexes(),
     catalog.ensureIndexes(),
+    media.ensureIndexes(),
     inventory.ensureIndexes(),
     orders.ensureIndexes(),
   ]);
   logger.debug('indexes ensured');
 
-  return { config, db, clock, ids, logger, flags, store, catalog, inventory, cart, orders };
+  return {
+    config,
+    db,
+    clock,
+    ids,
+    logger,
+    flags,
+    store,
+    catalog,
+    media,
+    inventory,
+    cart,
+    orders,
+  };
 };
 
 /**

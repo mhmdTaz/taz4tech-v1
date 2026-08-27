@@ -14,6 +14,7 @@ import { textFor } from '@platform/locale';
 import { Price } from '@ui/primitives/price';
 import { Badge } from '@ui/primitives/product-card';
 import { SpecTable } from '@ui/primitives/spec-table';
+import Image from 'next/image';
 import { getTranslations } from 'next-intl/server';
 import { getContainer } from '@/composition';
 import { AddToCart } from '../../cart/add-to-cart';
@@ -90,23 +91,23 @@ export const ProductDetail = async ({
 
       <div className="grid gap-12 lg:grid-cols-2">
         <section aria-label={t('gallery')} className="flex flex-col gap-4">
-          <div className="aspect-4/3 overflow-hidden rounded-[var(--radius-panel)] border border-hairline bg-raised">
+          <div className="relative aspect-4/3 overflow-hidden rounded-[var(--radius-panel)] border border-hairline bg-raised">
             {hero === undefined ? (
               <div
                 aria-hidden="true"
                 className="h-full w-full bg-linear-to-br from-raised to-surface"
               />
             ) : (
-              // See the note in ui/primitives/product-card.tsx.
-              // biome-ignore lint/performance/noImgElement: media hosts are a Phase 3 settings decision
-              <img
+              <Image
                 src={hero.url}
                 alt={textFor(hero.alt, locale)}
-                className="h-full w-full object-cover"
-                // The hero is the largest contentful paint on this page, so it
-                // is fetched eagerly rather than lazily.
-                fetchPriority="high"
-                decoding="async"
+                fill
+                // The hero IS the largest contentful paint on this page, so it
+                // is fetched eagerly and given a fetchpriority hint — which is
+                // what `priority` sets, along with skipping lazy loading.
+                priority
+                sizes="(min-width: 1024px) 50vw, 100vw"
+                className="object-cover"
               />
             )}
           </div>
@@ -116,15 +117,14 @@ export const ProductDetail = async ({
               {images.slice(1).map((image) => (
                 <li
                   key={image.url}
-                  className="aspect-square overflow-hidden rounded-lg border border-hairline bg-raised"
+                  className="relative aspect-square overflow-hidden rounded-lg border border-hairline bg-raised"
                 >
-                  {/* biome-ignore lint/performance/noImgElement: media hosts are a Phase 3 settings decision */}
-                  <img
+                  <Image
                     src={image.url}
                     alt={textFor(image.alt, locale)}
-                    loading="lazy"
-                    decoding="async"
-                    className="h-full w-full object-cover"
+                    fill
+                    sizes="120px"
+                    className="object-cover"
                   />
                 </li>
               ))}

@@ -24,6 +24,13 @@ export const config = {
    * `admin` is excluded because it is deliberately outside the locale tree —
    * without it, locale negotiation would rewrite `/admin` to `/en/admin`, which
    * does not exist.
+   *
+   * `media` for the same reason, with an extra twist. A picture is the same
+   * picture in Arabic, so catalogue images are served from one URL rather than
+   * three — and those URLs are content-addressed, `/media/<sha256>`, with no
+   * extension. The dot rule above therefore does not exclude them, and locale
+   * negotiation swallowed every image on the site. Found by the e2e spec, which
+   * asked for a stored image and got a 404.
    */
-  matcher: ['/((?!api|admin|_next|_vercel|.*\\..*).*)'],
+  matcher: ['/((?!api|admin|media|_next|_vercel|.*\\..*).*)'],
 };

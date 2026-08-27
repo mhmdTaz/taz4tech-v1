@@ -3,6 +3,7 @@
 import type { QuickView, QuickViewVariant } from '@modules/catalog';
 import type { Locale } from '@platform/locale';
 import { format as formatMoney } from '@platform/money';
+import Image from 'next/image';
 import {
   createContext,
   type MouseEvent,
@@ -231,19 +232,22 @@ const Body = ({
           exposed anyway. The image's own alt text is what describes it, and a
           single-image container needs no group label on top of that.
         */}
-        <div className="aspect-4/3 w-full shrink-0 overflow-hidden rounded-[var(--radius-panel)] border border-hairline bg-raised sm:w-56">
+        <div className="relative aspect-4/3 w-full shrink-0 overflow-hidden rounded-[var(--radius-panel)] border border-hairline bg-raised sm:w-56">
           {hero === undefined ? (
             <div
               aria-hidden="true"
               className="h-full w-full bg-linear-to-br from-raised to-surface"
             />
           ) : (
-            // biome-ignore lint/performance/noImgElement: media hosts are a Phase 3 settings decision
-            <img
+            // The dialog is at most half a phone screen and a third of a desktop
+            // one, and it opens on demand — so it is never the LCP element and
+            // never needs a priority hint.
+            <Image
               src={hero.url}
               alt={hero.alt}
-              className="h-full w-full object-cover"
-              decoding="async"
+              fill
+              sizes="(min-width: 640px) 320px, 50vw"
+              className="object-cover"
             />
           )}
         </div>

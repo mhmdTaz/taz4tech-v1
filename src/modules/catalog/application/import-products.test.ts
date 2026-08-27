@@ -3,7 +3,7 @@ import { englishOnly } from '@platform/locale';
 import { fromCents } from '@platform/money';
 import { err, ok, unwrapOrThrow } from '@platform/result';
 import { describe, expect, it, vi } from 'vitest';
-import type { ProductRepository, StockWriter, WorkbookReader } from '../contracts';
+import type { ImageIngestor, ProductRepository, StockWriter, WorkbookReader } from '../contracts';
 import type { Product } from '../domain/product';
 import { makeImportProducts } from './import-products';
 
@@ -49,6 +49,17 @@ const repository = (existing: Product[] = []) => {
 
 let counter = 0;
 
+/**
+ * Takes every image without asking anyone.
+ *
+ * These tests are about parsing a spreadsheet and writing a catalogue; taking
+ * copies of images has its own file. A fake that rewrote URLs would make every
+ * assertion here about media as well, for no gain.
+ */
+const imageIngestor = (): ImageIngestor => ({
+  take: async (url: string) => ({ ok: true, path: url }),
+});
+
 /** Records what the sheet's stock column asked for, and can refuse a SKU. */
 const stockWriter = (refuse: readonly string[] = []) => {
   const written: { sku: string; onHand: number }[] = [];
@@ -75,6 +86,7 @@ const importer = (
     repository: repo,
     reader: workbook,
     stock,
+    images: imageIngestor(),
     storeId: 'taz4tech',
     now: () => NOW,
     nextId: () => `PRODUCT${String(++counter).padStart(19, '0')}` as EntityId<'Product'>,

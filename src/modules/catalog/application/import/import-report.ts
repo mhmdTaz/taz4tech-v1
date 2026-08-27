@@ -23,6 +23,7 @@ import { type ProductError, type ProductStatus, priceRange } from '../../domain/
 import type { ColumnMapping, ImportField, MappingProblem } from './column-mapping';
 import type { CellProblem } from './parse-cell';
 import type { ImportPlan, SkuConflict } from './plan-import';
+import type { ImageFailure } from './take-images';
 
 export type ProductPreview = {
   readonly slug: string;
@@ -72,6 +73,16 @@ export type ImportReport = {
   /** SKUs whose stock the sheet stated and the write refused. */
   readonly stockFailures: readonly { readonly sku: string; readonly reason: string }[];
   readonly stockWritten: number;
+  /**
+   * Images the shop could not take its own copy of.
+   *
+   * The product imported without that picture — a supplier CDN having a bad
+   * afternoon must not cost four hundred products — so this is the receipt's
+   * job: say which ones, and why, so the sheet can be fixed and re-imported.
+   */
+  readonly imageFailures: readonly ImageFailure[];
+  /** Distinct supplier images fetched and stored. Zero on a preview, always. */
+  readonly imagesTaken: number;
   readonly summary: ImportPlan['summary'];
   /** True once a commit has happened; the preview and the receipt share this shape. */
   readonly committed: boolean;
@@ -99,6 +110,8 @@ export type ToImportReportInput = {
   readonly failures: readonly SaveFailure[];
   readonly stockFailures: readonly { readonly sku: string; readonly reason: string }[];
   readonly stockWritten: number;
+  readonly imageFailures: readonly ImageFailure[];
+  readonly imagesTaken: number;
 };
 
 export const toImportReport = (input: ToImportReportInput): ImportReport => {
@@ -148,5 +161,7 @@ export const toImportReport = (input: ToImportReportInput): ImportReport => {
     written: input.written,
     stockFailures: input.stockFailures,
     stockWritten: input.stockWritten,
+    imageFailures: input.imageFailures,
+    imagesTaken: input.imagesTaken,
   };
 };

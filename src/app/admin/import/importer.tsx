@@ -385,8 +385,27 @@ const Receipt = ({ report, diverged }: { report: ImportReport; diverged: boolean
     <div role="status" className={`${panel} border-positive/60 flex flex-col gap-1 text-positive`}>
       <p className="font-medium">
         Imported {report.written} product{report.written === 1 ? '' : 's'}
-        {report.stockWritten > 0 && `, and set stock on ${report.stockWritten} SKUs`}.
+        {report.stockWritten > 0 && `, and set stock on ${report.stockWritten} SKUs`}
+        {report.imagesTaken > 0 &&
+          `, and took ${report.imagesTaken} image${report.imagesTaken === 1 ? '' : 's'}`}
+        .
       </p>
+
+      {/*
+        The product imported; only the picture did not. Said in the receipt with
+        the slug and the URL, because a sheet is fixed by row and re-imported —
+        and because a catalogue that silently lost its images looks fine until
+        somebody opens the storefront.
+      */}
+      {report.imageFailures.length > 0 && (
+        <ul className="list-disc ps-5 text-caution">
+          {report.imageFailures.map((failure) => (
+            <li key={`${failure.slug}:${failure.url}`}>
+              no image for {failure.slug} — {failure.reason}
+            </li>
+          ))}
+        </ul>
+      )}
       {report.stockFailures.length > 0 && (
         <ul className="list-disc ps-5 text-negative">
           {report.stockFailures.map((failure) => (

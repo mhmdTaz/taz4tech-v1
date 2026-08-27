@@ -115,7 +115,7 @@ const main = async (): Promise<void> => {
       media: [
         {
           kind: 'image',
-          url: '/media/laptop.svg',
+          url: '/media/laptop.png',
           alt: {
             en: 'Lenovo IdeaPad 3, open, front view',
             ar: 'لينوفو ايديا باد 3، مفتوح، من الأمام',
@@ -169,7 +169,7 @@ const main = async (): Promise<void> => {
       media: [
         {
           kind: 'image',
-          url: '/media/phone.svg',
+          url: '/media/phone.png',
           alt: { en: 'Samsung Galaxy A55, front view' },
           width: 800,
           height: 600,
