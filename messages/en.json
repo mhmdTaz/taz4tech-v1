@@ -45,5 +45,17 @@
     "noMatches": "Nothing matches those filters. Try widening them.",
     "resultCount": "{count, plural, =0 {No products} one {# product} other {# products}}",
     "selected": "selected"
+  },
+  "collections": {
+    "title": "Collections",
+    "subtitle": "Curated groups of products.",
+    "metaTitle": "Collections",
+    "metaDescription": "Browse our collections — laptops, phones, accessories and more.",
+    "loading": "Loading collections…",
+    "empty": "No collections yet.",
+    "loadFailed": "Collections could not be loaded.",
+    "curated": "Hand-picked",
+    "breadcrumb": "Breadcrumb",
+    "notFoundTitle": "Collection not found"
   }
 }

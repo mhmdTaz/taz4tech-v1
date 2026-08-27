@@ -7,6 +7,7 @@
  * refusals.
  */
 
+import { compact } from '@platform/object';
 import { err, ok, type Result } from '@platform/result';
 import type { ProductFilters, ProductRepository, SearchResult } from '../contracts';
 import { isSearchable } from '../domain/search';
@@ -39,69 +40,99 @@ export type SearchProducts = (
 const boundedInteger = (value: number | undefined): number | undefined =>
   value === undefined || !Number.isFinite(value) ? undefined : Math.trunc(value);
 
+const validateLimit = (limit: number): SearchProductsError | null =>
+  Number.isInteger(limit) && limit >= 1 && limit <= MAX_PAGE_SIZE
+    ? null
+    : { tag: 'invalid_limit', limit };
+
+/** Distinct, non-blank, and not more than a person would ever select. */
+const cleanValues = (values: readonly string[]): string[] =>
+  [...new Set(values)].filter((value) => value.trim().length > 0);
+
+type CleanedFilters = {
+  readonly brands: string[];
+  readonly options: { name: string; values: string[] }[];
+};
+
+const cleanFilters = (
+  input: SearchProductsInput,
+): { ok: true; value: CleanedFilters } | { ok: false; error: SearchProductsError } => {
+  const brands = cleanValues(input.brands ?? []);
+  if (brands.length > MAX_FILTER_VALUES) {
+    return { ok: false, error: { tag: 'too_many_filter_values', field: 'brands' } };
+  }
+
+  const options: { name: string; values: string[] }[] = [];
+  for (const option of input.options ?? []) {
+    const values = cleanValues(option.values);
+    // An option with nothing selected is not a filter; dropping it beats
+    // sending the repository a clause that matches everything.
+    if (values.length === 0) continue;
+    if (values.length > MAX_FILTER_VALUES) {
+      return { ok: false, error: { tag: 'too_many_filter_values', field: option.name } };
+    }
+    options.push({ name: option.name, values });
+  }
+
+  if (options.length > MAX_FILTER_VALUES) {
+    return { ok: false, error: { tag: 'too_many_filter_values', field: 'options' } };
+  }
+
+  return { ok: true, value: { brands, options } };
+};
+
+const validatePriceRange = (
+  minCents: number | undefined,
+  maxCents: number | undefined,
+): SearchProductsError | null => {
+  if (minCents !== undefined && minCents < 0) {
+    return { tag: 'invalid_price_range', minCents, maxCents: maxCents ?? 0 };
+  }
+  // Refused rather than swapped. A reversed range means the UI or the link is
+  // wrong, and silently correcting it hides that from whoever built it.
+  if (minCents !== undefined && maxCents !== undefined && minCents > maxCents) {
+    return { tag: 'invalid_price_range', minCents, maxCents };
+  }
+  return null;
+};
+
 export const makeSearchProducts =
   (deps: { repository: ProductRepository; storeId: string }): SearchProducts =>
   async (input = {}) => {
     const limit = input.limit ?? DEFAULT_PAGE_SIZE;
-    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_SIZE) {
-      return err({ tag: 'invalid_limit', limit });
-    }
+    const limitProblem = validateLimit(limit);
+    if (limitProblem !== null) return err(limitProblem);
 
-    const brands = [...new Set(input.brands ?? [])].filter((brand) => brand.trim().length > 0);
-    if (brands.length > MAX_FILTER_VALUES) {
-      return err({ tag: 'too_many_filter_values', field: 'brands' });
-    }
-
-    const options: { name: string; values: string[] }[] = [];
-    for (const option of input.options ?? []) {
-      const values = [...new Set(option.values)].filter((value) => value.trim().length > 0);
-      if (values.length === 0) continue;
-      if (values.length > MAX_FILTER_VALUES) {
-        return err({ tag: 'too_many_filter_values', field: option.name });
-      }
-      options.push({ name: option.name, values });
-    }
-    if (options.length > MAX_FILTER_VALUES) {
-      return err({ tag: 'too_many_filter_values', field: 'options' });
-    }
+    const cleaned = cleanFilters(input);
+    if (!cleaned.ok) return err(cleaned.error);
 
     const priceMinCents = boundedInteger(input.priceMinCents);
     const priceMaxCents = boundedInteger(input.priceMaxCents);
-    if (
-      priceMinCents !== undefined &&
-      priceMaxCents !== undefined &&
-      priceMinCents > priceMaxCents
-    ) {
-      // Refused rather than swapped. A reversed range means the UI or the link
-      // is wrong, and silently correcting it hides that from whoever built it.
-      return err({ tag: 'invalid_price_range', minCents: priceMinCents, maxCents: priceMaxCents });
-    }
-    if (priceMinCents !== undefined && priceMinCents < 0) {
-      return err({
-        tag: 'invalid_price_range',
-        minCents: priceMinCents,
-        maxCents: priceMaxCents ?? 0,
-      });
-    }
+    const priceProblem = validatePriceRange(priceMinCents, priceMaxCents);
+    if (priceProblem !== null) return err(priceProblem);
 
-    const filters: ProductFilters = {
+    const { brands, options } = cleaned.value;
+
+    const filters: ProductFilters = compact({
       // A query of whitespace is not a search; passing it through would cost a
-      // text index lookup and return nothing.
-      ...(input.search !== undefined && isSearchable(input.search) ? { search: input.search } : {}),
-      ...(brands.length > 0 ? { brands } : {}),
-      ...(options.length > 0 ? { options } : {}),
-      ...(priceMinCents === undefined ? {} : { priceMinCents }),
-      ...(priceMaxCents === undefined ? {} : { priceMaxCents }),
-    };
+      // text index lookup that can only return nothing.
+      search: input.search !== undefined && isSearchable(input.search) ? input.search : undefined,
+      brands: brands.length > 0 ? brands : undefined,
+      options: options.length > 0 ? options : undefined,
+      priceMinCents,
+      priceMaxCents,
+    });
 
     return ok(
-      await deps.repository.search({
-        storeId: deps.storeId,
-        limit,
-        // Same single gate as listProducts: `status` cannot reach around it.
-        ...(input.includeUnpublished === true ? {} : { status: 'active' as const }),
-        ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
-        filters,
-      }),
+      await deps.repository.search(
+        compact({
+          storeId: deps.storeId,
+          limit,
+          // Same single gate as listProducts: `status` cannot reach around it.
+          status: input.includeUnpublished === true ? undefined : ('active' as const),
+          cursor: input.cursor,
+          filters,
+        }),
+      ),
     );
   };

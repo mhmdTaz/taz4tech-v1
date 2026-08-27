@@ -8,7 +8,13 @@ const LOCALES = ['en', 'ar', 'fr'] as const;
  * have completely different failure modes from a single panel — tables, image
  * alt text, link names, and a variant picker built from links.
  */
-const PATHS = ['', '/products', '/products/lenovo-ideapad-3'] as const;
+const PATHS = [
+  '',
+  '/products',
+  '/products/lenovo-ideapad-3',
+  '/collections',
+  '/collections/laptops',
+] as const;
 
 /**
  * WCAG 2.1 AA, checked in every locale.

@@ -45,5 +45,17 @@
     "noMatches": "Aucun résultat pour ces filtres. Essayez de les élargir.",
     "resultCount": "{count, plural, =0 {Aucun produit} one {# produit} other {# produits}}",
     "selected": "sélectionné"
+  },
+  "collections": {
+    "title": "Collections",
+    "subtitle": "Des sélections de produits.",
+    "metaTitle": "Collections",
+    "metaDescription": "Parcourez nos collections — ordinateurs portables, téléphones, accessoires et plus.",
+    "loading": "Chargement des collections…",
+    "empty": "Aucune collection pour le moment.",
+    "loadFailed": "Impossible de charger les collections.",
+    "curated": "Sélection",
+    "breadcrumb": "Fil d'Ariane",
+    "notFoundTitle": "Collection introuvable"
   }
 }
