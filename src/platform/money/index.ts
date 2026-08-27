@@ -128,6 +128,36 @@ export const applyRate = (a: Money, rate: number): Result<Money, MoneyError> => 
   return ok({ cents: roundHalfUp(a.cents * rate), currency: a.currency });
 };
 
+/**
+ * Scale by a rate expressed in BASIS POINTS, where 10000 is unchanged.
+ *
+ *   10500 -> +5%      9500 -> -5%      20000 -> double
+ *
+ * Basis points rather than a percentage float because a bulk price change is
+ * entered by a person and stored in a form value, and "5%" as 0.05 cannot be
+ * represented exactly — 1999 * 1.05 lands on 2098.9500000000003 before rounding.
+ * An integer multiplier keeps the multiplication exact and leaves exactly one
+ * rounding step, here, where it can be seen.
+ *
+ * The product stays inside the safe integer range for any realistic catalogue:
+ * a $100,000 item scaled by 100x is 10^13, and 2^53 is 9x10^15.
+ */
+export const scaleByBasisPoints = (a: Money, basisPoints: number): Result<Money, MoneyError> => {
+  if (!Number.isInteger(basisPoints)) return err({ tag: 'not_an_integer', cents: basisPoints });
+
+  const product = a.cents * basisPoints;
+  /*
+   * isSafeInteger, not isFinite. Past 2^53 a product is still a finite float —
+   * it has simply stopped being an exact integer, so the division below would
+   * round something that is already wrong. `not_finite` is the closest tag the
+   * shared union offers; what it means here is "outside the range where this
+   * arithmetic is exact".
+   */
+  if (!Number.isSafeInteger(product)) return err({ tag: 'not_finite', cents: product });
+
+  return ok({ cents: roundHalfUp(product / 10_000), currency: a.currency });
+};
+
 /** Format for display. Latin digits everywhere, including ar — see the note below. */
 export const format = (a: Money, locale: 'en' | 'ar' | 'fr' = 'en'): string =>
   new Intl.NumberFormat(locale, {

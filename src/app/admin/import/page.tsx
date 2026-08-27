@@ -26,6 +26,12 @@ export default async function ImportPage() {
           </p>
         </div>
 
+        <a
+          href="/admin/products"
+          className="rounded-lg border border-hairline px-3 py-2 text-sm text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          Products
+        </a>
         <form action={logOut}>
           <button
             type="submit"

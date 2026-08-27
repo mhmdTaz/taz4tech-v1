@@ -37,6 +37,7 @@ const repository = (existing: Product[] = []) => {
     findBySkus: vi.fn(async (_storeId: string, skus: readonly string[]) =>
       existing.filter((product) => product.variants.some((v) => skus.includes(v.sku))),
     ),
+    findByIds: vi.fn(async () => []),
     list: vi.fn(),
     save: vi.fn(async (product: Product) => {
       saved.push(product);
@@ -414,6 +415,7 @@ describe('a write that loses a race', () => {
       search: vi.fn(),
       findBySlugs: vi.fn().mockResolvedValue([]),
       findBySkus: vi.fn().mockResolvedValue([]),
+      findByIds: vi.fn().mockResolvedValue([]),
       list: vi.fn(),
       save: vi.fn(async (product: Product) => {
         if (product.variants.some((variant) => variant.sku === takenSku)) {
@@ -467,6 +469,7 @@ describe('a write that loses a race', () => {
       search: vi.fn(),
       findBySlugs: vi.fn().mockResolvedValue([]),
       findBySkus: vi.fn().mockResolvedValue([]),
+      findByIds: vi.fn().mockResolvedValue([]),
       list: vi.fn(),
       save: vi.fn().mockRejectedValue(new Error('connection reset')),
     };

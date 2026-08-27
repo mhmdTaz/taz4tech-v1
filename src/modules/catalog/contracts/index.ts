@@ -126,6 +126,14 @@ export interface ProductRepository {
    * lookup that only surfaces as a failed write, halfway through the import.
    */
   findBySkus(storeId: string, skus: readonly string[]): Promise<Product[]>;
+  /**
+   * Bulk id lookup, for an admin acting on an explicit selection.
+   *
+   * Returns only what exists and only within the store, so an id from another
+   * tenant is simply absent rather than an error — and the caller reports the
+   * absence rather than quietly acting on a shorter list than it was given.
+   */
+  findByIds(storeId: string, ids: readonly ProductId[]): Promise<Product[]>;
   list(query: ListProductsQuery): Promise<ProductPage>;
   /**
    * A page of results plus the facet counts for the same query.

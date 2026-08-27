@@ -12,6 +12,7 @@ import {
   negate,
   parse,
   roundHalfUp,
+  scaleByBasisPoints,
   subtract,
   sum,
   times,
@@ -196,5 +197,72 @@ describe('formatting', () => {
     expect(toDecimalString(usd(5))).toBe('0.05');
     expect(toDecimalString(usd(0))).toBe('0.00');
     expect(toDecimalString(usd(-420))).toBe('-4.20');
+  });
+});
+
+describe('scaleByBasisPoints', () => {
+  it('leaves the amount alone at 10000', () => {
+    expect(unwrapOrThrow(scaleByBasisPoints(usd(1999), 10_000)).cents).toBe(1999);
+  });
+
+  it('raises by five percent, rounding half away from zero', () => {
+    // 1999 * 1.05 = 2098.95 -> 2099. Through a float rate this is
+    // 2098.9500000000003 first, which is why the multiplier is an integer.
+    expect(unwrapOrThrow(scaleByBasisPoints(usd(1999), 10_500)).cents).toBe(2099);
+  });
+
+  it('lowers by five percent', () => {
+    // 1999 * 0.95 = 1899.05 -> 1899
+    expect(unwrapOrThrow(scaleByBasisPoints(usd(1999), 9_500)).cents).toBe(1899);
+  });
+
+  it('rounds a half cent away from zero, not to even', () => {
+    // 10 * 1.05 = 10.5 -> 11, matching what a customer computes in their head.
+    expect(unwrapOrThrow(scaleByBasisPoints(usd(10), 10_500)).cents).toBe(11);
+  });
+
+  it('rounds a negative half cent away from zero too', () => {
+    expect(unwrapOrThrow(scaleByBasisPoints(usd(-10), 10_500)).cents).toBe(-11);
+  });
+
+  it('handles zero', () => {
+    expect(unwrapOrThrow(scaleByBasisPoints(usd(0), 12_345)).cents).toBe(0);
+  });
+
+  it('can take a price to zero', () => {
+    expect(unwrapOrThrow(scaleByBasisPoints(usd(1999), 0)).cents).toBe(0);
+  });
+
+  it('keeps the currency', () => {
+    expect(unwrapOrThrow(scaleByBasisPoints(usd(100), 11_000)).currency).toBe('USD');
+  });
+
+  it('rejects a fractional multiplier, because rounding must be explicit', () => {
+    expect(scaleByBasisPoints(usd(100), 10_500.5)).toEqual({
+      ok: false,
+      error: { tag: 'not_an_integer', cents: 10_500.5 },
+    });
+  });
+
+  it('rejects a multiplier that is not finite', () => {
+    expect(scaleByBasisPoints(usd(100), Number.POSITIVE_INFINITY).ok).toBe(false);
+  });
+
+  it('rejects a product that leaves the exact-integer range', () => {
+    // MAX_SAFE_INTEGER * 10^10 is still FINITE as a float — it has just stopped
+    // being an exact integer. Guarding on isFinite would let it through and
+    // round a number that was already wrong.
+    const huge = scaleByBasisPoints(usd(Number.MAX_SAFE_INTEGER), 10_000_000_000);
+    expect(huge.ok).toBe(false);
+    expect(Number.isFinite(Number.MAX_SAFE_INTEGER * 10_000_000_000)).toBe(true);
+  });
+
+  it('is exact across a realistic price list', () => {
+    // Every cent from $0.01 to $10.00 raised 5%: the result must equal the
+    // decimal computation rounded half up, with no drift anywhere.
+    for (let cents = 1; cents <= 1000; cents++) {
+      const expected = Math.round((cents * 105) / 100);
+      expect(unwrapOrThrow(scaleByBasisPoints(usd(cents), 10_500)).cents).toBe(expected);
+    }
   });
 });

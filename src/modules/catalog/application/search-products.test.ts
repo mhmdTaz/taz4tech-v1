@@ -17,6 +17,7 @@ const repository = () => {
     findBySku: vi.fn(),
     findBySlugs: vi.fn(),
     findBySkus: vi.fn(async () => []),
+    findByIds: vi.fn(async () => []),
     list: vi.fn(),
     save: vi.fn(),
     search: vi.fn(async (query: SearchProductsQuery) => {
@@ -216,10 +217,39 @@ describe('searchProducts', () => {
       findBySku: vi.fn(),
       findBySlugs: vi.fn(),
       findBySkus: vi.fn(async () => []),
+      findByIds: vi.fn(async () => []),
       list: vi.fn(),
       save: vi.fn(),
       search: vi.fn().mockRejectedValue(new Error('connection refused')),
     };
     await expect(search(repo)()).rejects.toThrow('connection refused');
+  });
+});
+
+describe('the status gate', () => {
+  const queryFor = async (input: Parameters<ReturnType<typeof search>>[0]) => {
+    const { repo, calls } = repository();
+    await search(repo)(input);
+    return calls[0];
+  };
+
+  it('forces active for a storefront caller', async () => {
+    expect(await queryFor({})).toMatchObject({ status: 'active' });
+  });
+
+  it('ignores an explicit status unless unpublished are asked for', async () => {
+    // The gate that matters: ?status=draft on a storefront URL must not become
+    // a draft listing. There is one way to widen visibility, not two.
+    expect(await queryFor({ status: 'draft' })).toMatchObject({ status: 'active' });
+  });
+
+  it('drops the status filter entirely for an admin caller', async () => {
+    expect(await queryFor({ includeUnpublished: true })).not.toHaveProperty('status');
+  });
+
+  it('honours a status for an admin caller', async () => {
+    expect(await queryFor({ includeUnpublished: true, status: 'draft' })).toMatchObject({
+      status: 'draft',
+    });
   });
 });

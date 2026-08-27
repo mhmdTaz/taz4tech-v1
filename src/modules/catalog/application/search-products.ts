@@ -10,6 +10,7 @@
 import { compact } from '@platform/object';
 import { err, ok, type Result } from '@platform/result';
 import type { ProductFilters, ProductRepository, SearchResult } from '../contracts';
+import type { ProductStatus } from '../domain/product';
 import { isSearchable } from '../domain/search';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from './list-products';
 
@@ -31,6 +32,8 @@ export type SearchProductsInput = {
   readonly priceMaxCents?: number;
   /** Admin only. The storefront must never see drafts. */
   readonly includeUnpublished?: boolean;
+  /** Admin only, and only meaningful alongside includeUnpublished. */
+  readonly status?: ProductStatus;
 };
 
 export type SearchProducts = (
@@ -123,13 +126,23 @@ export const makeSearchProducts =
       priceMaxCents,
     });
 
+    /*
+     * The same single gate as listProducts, and for the same reason: `status`
+     * cannot be used to reach around includeUnpublished. Ask for drafts without
+     * the flag and you get active products, not drafts.
+     *
+     * The caller who leaks a draft to a customer is never the one who read this
+     * file — it is the one who passed the parameter that looked harmless.
+     */
+    const status: ProductStatus | undefined =
+      input.includeUnpublished === true ? input.status : 'active';
+
     return ok(
       await deps.repository.search(
         compact({
           storeId: deps.storeId,
           limit,
-          // Same single gate as listProducts: `status` cannot reach around it.
-          status: input.includeUnpublished === true ? undefined : ('active' as const),
+          status,
           cursor: input.cursor,
           filters,
         }),
