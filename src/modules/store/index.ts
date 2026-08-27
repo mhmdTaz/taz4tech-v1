@@ -7,6 +7,10 @@
  */
 
 import type { Db } from '@platform/mongo';
+import {
+  type EnsureStoreSettings,
+  makeEnsureStoreSettings,
+} from './application/ensure-store-settings';
 import { type GetStoreSettings, makeGetStoreSettings } from './application/get-store-settings';
 import { makeSaveStoreSettings, type SaveStoreSettings } from './application/save-store-settings';
 import {
@@ -18,6 +22,10 @@ import {
   ensureStoreIndexes,
 } from './infrastructure/mongo-store-settings-repository';
 
+export type {
+  EnsureStoreSettings,
+  EnsureStoreSettingsOutcome,
+} from './application/ensure-store-settings';
 export type { GetStoreSettings, GetStoreSettingsError } from './application/get-store-settings';
 export type { SaveStoreSettings, SaveStoreSettingsError } from './application/save-store-settings';
 export type {
@@ -38,7 +46,13 @@ export {
 
 export type StoreModule = {
   readonly getStoreSettings: GetStoreSettings;
+  /**
+   * Overwrites everything it is given. The settings screen wants that; a seeder
+   * must not have it — see ensureStoreSettings.
+   */
   readonly saveStoreSettings: SaveStoreSettings;
+  /** Creates settings only if there are none. What `pnpm seed` calls. */
+  readonly ensureStoreSettings: EnsureStoreSettings;
   /** The admin settings screen: raw form strings in, validated settings out. */
   readonly updateStoreSettings: UpdateStoreSettings;
   readonly ensureIndexes: () => Promise<void>;
@@ -51,10 +65,12 @@ export type StoreModule = {
 export const createStoreModule = (deps: { db: Db; storeId: string }): StoreModule => {
   const repository = createMongoStoreSettingsRepository(deps.db);
   const wiring = { repository, storeId: deps.storeId };
+  const saveStoreSettings = makeSaveStoreSettings(wiring);
 
   return {
     getStoreSettings: makeGetStoreSettings(wiring),
-    saveStoreSettings: makeSaveStoreSettings(wiring),
+    saveStoreSettings,
+    ensureStoreSettings: makeEnsureStoreSettings({ ...wiring, save: saveStoreSettings }),
     updateStoreSettings: makeUpdateStoreSettings(wiring),
     ensureIndexes: () => ensureStoreIndexes(deps.db),
   };
