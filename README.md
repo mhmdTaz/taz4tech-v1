@@ -241,6 +241,37 @@ store settings are real configuration, three fake laptops are not. The fixtures
 cover the awkward shapes on purpose — an incomplete variant matrix, a live offer,
 a product with no imagery, and a draft that must stay hidden.
 
+## Quick view
+
+A peek at a product from the listing, without losing your place in the grid.
+
+**No fetch and no endpoint.** The listing has already loaded every product on
+the page in order to render the tiles, so the dialog's data is shipped *with* the
+page rather than fetched when it opens. That removes a round trip from the one
+interaction whose entire point is not waiting for one — measured at about 1.4 KB
+gzipped per product, paid whether or not anyone opens a dialog.
+
+**The trigger is a link to the product page, always.** Before hydration — a real
+slice of the first interactions on a Lebanese mobile connection — and with
+JavaScript unavailable, clicking it navigates. Modifier-clicks are left alone
+too, so "open in a new tab" keeps working the way a link is supposed to.
+
+**A native `<dialog>`**, opened with `showModal()`. Focus trapping, Escape to
+dismiss, an inert background and focus restored to the trigger are all free and
+none of them are re-implemented slightly wrong. A hand-written focus trap is
+where keyboard users actually get stuck.
+
+**The URL does not change while it is open.** It is a transient peek; the tile
+link is the thing that is shareable, indexable and back-navigable. Making the
+dialog a history entry would mean a client navigation, and on a route that
+renders from the database that is a wasted round trip every time one is closed.
+
+Inside the dialog, variant selection is **client state** — there is no address
+here to own. The product page does the opposite, deliberately: there the
+combination has to be shareable and crawlable, so each option value is a link.
+Offer expiry is applied on the **server**, so a device with a wrong clock cannot
+show a discount that ended last month.
+
 ## Collections
 
 ```

@@ -100,6 +100,13 @@ export {
   productPath,
   productUrl,
 } from './application/product-structured-data';
+export type {
+  QuickView,
+  QuickViewOption,
+  QuickViewOptions,
+  QuickViewVariant,
+} from './application/quick-view';
+export { toQuickView } from './application/quick-view';
 export type { SaveCollection, SaveCollectionError } from './application/save-collection';
 export type { SaveProduct, SaveProductError } from './application/save-product';
 export type {

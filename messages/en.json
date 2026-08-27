@@ -44,7 +44,12 @@
     "searchSubmit": "Search",
     "noMatches": "Nothing matches those filters. Try widening them.",
     "resultCount": "{count, plural, =0 {No products} one {# product} other {# products}}",
-    "selected": "selected"
+    "selected": "selected",
+    "quickView": "Quick view",
+    "quickViewOf": "Quick view: {title}",
+    "close": "Close",
+    "fullDetails": "View full details",
+    "quickViewHint": "A summary. The full page has specifications and every photo."
   },
   "collections": {
     "title": "Collections",
