@@ -110,6 +110,8 @@
     "delivery": "Delivery",
     "total": "Total",
     "free": "Free",
+    "deliveryByRegion": "By governorate",
+    "totalFrom": "From {amount}",
     "placeOrder": "Place order — cash on delivery",
     "codNote": "You pay the driver in cash when your order arrives. Nothing is charged now.",
     "backToCart": "Back to cart",

@@ -7,6 +7,7 @@
  */
 
 import type { Locale } from '@platform/locale';
+import { type ByRegion, REGIONS, type Region } from '@platform/regions';
 import { err, ok, type Result } from '@platform/result';
 
 export type StoreSettings = {
@@ -33,16 +34,15 @@ export type StoreSettings = {
    */
   readonly commercialRegistryNumber: string | null;
   /**
-   * Delivery fee, in integer cents, applied to every order.
+   * Delivery, in integer cents, per governorate.
    *
-   * FLAT, deliberately, and 0 by default. Delivery cost in Lebanon genuinely
-   * varies by governorate — Beirut is not Akkar — so a per-region table is the
-   * obvious next step, and the settings screen that would edit one now exists.
-   * What is missing is the prices: the region IS recorded on every order, so the
-   * data to set eight of them from real deliveries is being collected, and
-   * guessing them first would be worse than one number everybody understands.
+   * Complete: every one of the eight, no default and no gaps. A partial table
+   * needs a fallback, and a fallback is a second answer to "what does delivery
+   * to Akkar cost" — which is how a checkout quotes one number and an order
+   * charges another. A shop with one price everywhere writes it eight times,
+   * which is cheap; a shop with a wrong price for one governorate is not.
    */
-  readonly deliveryFeeCents: number;
+  readonly deliveryFees: ByRegion<number>;
 };
 
 export type StoreSettingsError =
@@ -51,7 +51,11 @@ export type StoreSettingsError =
   | { readonly tag: 'default_locale_not_offered'; readonly defaultLocale: Locale }
   | { readonly tag: 'vat_out_of_range'; readonly vatBasisPoints: number }
   | { readonly tag: 'phone_not_e164'; readonly contactPhone: string }
-  | { readonly tag: 'delivery_fee_invalid'; readonly deliveryFeeCents: number };
+  | {
+      readonly tag: 'delivery_fee_invalid';
+      readonly region: Region;
+      readonly deliveryFeeCents: number;
+    };
 
 const E164 = /^\+[1-9]\d{7,14}$/;
 
@@ -79,8 +83,15 @@ export const createStoreSettings = (
   }
   // Money everywhere in this system is integer cents. A fractional fee is a
   // caller that computed one from a float, which is the bug this catches.
-  if (!Number.isInteger(input.deliveryFeeCents) || input.deliveryFeeCents < 0) {
-    return err({ tag: 'delivery_fee_invalid', deliveryFeeCents: input.deliveryFeeCents });
+  //
+  // Every governorate is checked, not just the ones that happen to be present:
+  // a table missing Akkar reads as `undefined` cents, and `undefined` added to a
+  // subtotal is NaN on a receipt.
+  for (const region of REGIONS) {
+    const cents = input.deliveryFees[region];
+    if (!Number.isInteger(cents) || cents < 0) {
+      return err({ tag: 'delivery_fee_invalid', region, deliveryFeeCents: cents });
+    }
   }
   return ok({ ...input, name: input.name.trim(), siteUrl: input.siteUrl.replace(/\/+$/, '') });
 };
@@ -91,3 +102,22 @@ export const vatRate = (settings: StoreSettings): number => settings.vatBasisPoi
 /** Law 81/2018 Art. 31: show seller identity only once there is one to show. */
 export const showsRegistryNumber = (settings: StoreSettings): boolean =>
   settings.commercialRegistryNumber !== null && settings.commercialRegistryNumber.trim().length > 0;
+
+/** What delivery costs to one governorate. Total, because the table is complete. */
+export const deliveryFeeFor = (settings: StoreSettings, region: Region): number =>
+  settings.deliveryFees[region];
+
+/**
+ * The cheapest and dearest delivery in the table.
+ *
+ * The checkout page uses it to decide whether it can quote an exact total before
+ * the customer has chosen a governorate. When every governorate costs the same —
+ * which is what a flat rate looks like here — it can. When they differ, quoting
+ * one number would be picking a governorate on the customer's behalf.
+ */
+export const deliverySpread = (
+  settings: StoreSettings,
+): { readonly min: number; readonly max: number } => {
+  const fees = REGIONS.map((region) => settings.deliveryFees[region]);
+  return { min: Math.min(...fees), max: Math.max(...fees) };
+};

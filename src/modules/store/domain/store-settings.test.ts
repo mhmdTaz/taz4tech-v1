@@ -1,6 +1,9 @@
+import { REGIONS, sameEverywhere } from '@platform/regions';
 import { describe, expect, it } from 'vitest';
 import {
   createStoreSettings,
+  deliveryFeeFor,
+  deliverySpread,
   type StoreSettings,
   showsRegistryNumber,
   vatRate,
@@ -15,7 +18,7 @@ const valid: StoreSettings = {
   contactPhone: '+96170123456',
   vatBasisPoints: 1100,
   commercialRegistryNumber: null,
-  deliveryFeeCents: 0,
+  deliveryFees: sameEverywhere(0),
 };
 
 describe('createStoreSettings', () => {
@@ -115,26 +118,87 @@ describe('showsRegistryNumber', () => {
   });
 });
 
-describe('the delivery fee', () => {
-  it('accepts zero, which is what a shop that does not charge for delivery sets', () => {
-    expect(createStoreSettings({ ...valid, deliveryFeeCents: 0 }).ok).toBe(true);
+describe('the delivery table', () => {
+  it('accepts zero everywhere, which is what a shop with free delivery sets', () => {
+    expect(createStoreSettings({ ...valid, deliveryFees: sameEverywhere(0) }).ok).toBe(true);
   });
 
-  it('accepts a real fee', () => {
-    const result = createStoreSettings({ ...valid, deliveryFeeCents: 300 });
-    expect(result.ok && result.value.deliveryFeeCents).toBe(300);
+  it('accepts a different price for every governorate', () => {
+    // The whole point: Beirut is not Akkar.
+    const fees = { ...sameEverywhere(300), beirut: 200, akkar: 800 };
+    const result = createStoreSettings({ ...valid, deliveryFees: fees });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(deliveryFeeFor(result.value, 'beirut')).toBe(200);
+      expect(deliveryFeeFor(result.value, 'akkar')).toBe(800);
+      expect(deliveryFeeFor(result.value, 'south')).toBe(300);
+    }
   });
 
-  it('refuses a fractional fee', () => {
+  it('refuses a fractional fee, naming the governorate', () => {
     // Money everywhere in this system is integer cents. A fraction here is a
     // caller that computed one from a float, which is the bug this catches.
-    expect(createStoreSettings({ ...valid, deliveryFeeCents: 2.5 })).toEqual({
+    expect(
+      createStoreSettings({ ...valid, deliveryFees: { ...sameEverywhere(0), bekaa: 2.5 } }),
+    ).toEqual({
       ok: false,
-      error: { tag: 'delivery_fee_invalid', deliveryFeeCents: 2.5 },
+      error: { tag: 'delivery_fee_invalid', region: 'bekaa', deliveryFeeCents: 2.5 },
     });
   });
 
   it('refuses a negative fee, which would be a discount by accident', () => {
-    expect(createStoreSettings({ ...valid, deliveryFeeCents: -100 }).ok).toBe(false);
+    const fees = { ...sameEverywhere(0), north: -100 };
+    expect(createStoreSettings({ ...valid, deliveryFees: fees }).ok).toBe(false);
+  });
+
+  it('refuses a table with a governorate missing', () => {
+    /*
+     * The reason the table is complete rather than partial. A missing price is
+     * `undefined` cents, and `undefined` added to a subtotal is NaN on a receipt
+     * — a failure that reaches the customer rather than the developer.
+     */
+    const { nabatieh: _dropped, ...incomplete } = sameEverywhere(0);
+    const result = createStoreSettings({
+      ...valid,
+      deliveryFees: incomplete as StoreSettings['deliveryFees'],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { tag: 'delivery_fee_invalid', region: 'nabatieh', deliveryFeeCents: undefined },
+    });
+  });
+
+  it('checks every governorate, not just the first', () => {
+    // A loop that returned after one check would pass this and ship a shop that
+    // gives Nabatieh its deliveries free.
+    const fees = { ...sameEverywhere(300), nabatieh: -1 };
+    expect(createStoreSettings({ ...valid, deliveryFees: fees }).ok).toBe(false);
+  });
+});
+
+describe('the spread of the table', () => {
+  it('is a single number when every governorate costs the same', () => {
+    // What a flat rate looks like here — and what lets checkout quote an exact
+    // total before the customer has chosen where they live.
+    const result = createStoreSettings({ ...valid, deliveryFees: sameEverywhere(250) });
+    expect(result.ok && deliverySpread(result.value)).toEqual({ min: 250, max: 250 });
+  });
+
+  it('reports the cheapest and the dearest when they differ', () => {
+    const fees = { ...sameEverywhere(300), beirut: 100, akkar: 900 };
+    const result = createStoreSettings({ ...valid, deliveryFees: fees });
+    expect(result.ok && deliverySpread(result.value)).toEqual({ min: 100, max: 900 });
+  });
+
+  it('looks at all eight, wherever the extremes sit in the list', () => {
+    // The last governorate in the list, so a spread that only read the first few
+    // would report 500 and let checkout quote a delivery nobody offers.
+    const last = REGIONS[REGIONS.length - 1] ?? 'beirut';
+    const fees = { ...sameEverywhere(500), [last]: 50 };
+    const result = createStoreSettings({ ...valid, deliveryFees: fees });
+
+    expect(result.ok && deliverySpread(result.value).min).toBe(50);
   });
 });

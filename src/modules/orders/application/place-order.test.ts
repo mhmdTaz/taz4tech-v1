@@ -1,5 +1,6 @@
 import type { PricedCart, PricedLine } from '@modules/cart';
 import type { EntityId } from '@platform/ids';
+import type { Region } from '@platform/regions';
 import { err, ok } from '@platform/result';
 import { describe, expect, it, vi } from 'vitest';
 import type { OrderRepository, StockLedger } from '../contracts';
@@ -73,6 +74,8 @@ const placer = (
     cart?: PricedCart;
     take?: StockLedger['take'];
     deliveryFeeCents?: number;
+    /** What delivery costs, per governorate, when the flat number is not enough. */
+    fees?: Partial<Record<Region, number>>;
   } = {},
 ) => {
   counter = 0;
@@ -80,15 +83,27 @@ const placer = (
   const giveBack = vi.fn(async () => undefined);
   const repo = options.repository ?? repository();
 
+  /*
+   * Region-aware, deliberately.
+   *
+   * A fake that ignored its argument would let the region silently stop reaching
+   * the port and every test here would still pass — with every order in the
+   * country charged whatever Beirut costs.
+   */
+  const deliveryFeeCents = vi.fn(
+    async (region: Region) => options.fees?.[region] ?? options.deliveryFeeCents ?? 300,
+  );
+
   return {
     take,
     giveBack,
+    deliveryFeeCents,
     repository: repo,
     place: makePlaceOrder({
       repository: repo,
       priceCart: vi.fn(async () => options.cart ?? priced()),
       stock: { take, giveBack },
-      deliveryFeeCents: vi.fn(async () => options.deliveryFeeCents ?? 300),
+      deliveryFeeCents,
       storeId: 'taz4tech',
       now: () => NOW,
       nextId: () => `ORDER${String(++counter).padStart(21, '0')}` as EntityId<'Order'>,
@@ -176,6 +191,26 @@ describe('placing an order', () => {
   it('applies a zero delivery fee without inventing one', async () => {
     const order = await placed(placer({ deliveryFeeCents: 0 }));
     expect(order.total.cents).toBe(order.subtotal.cents);
+  });
+
+  it('asks what delivery costs TO THIS GOVERNORATE', async () => {
+    const harness = placer();
+    await placed(harness, { region: 'akkar' });
+
+    expect(harness.deliveryFeeCents).toHaveBeenCalledWith('akkar');
+  });
+
+  it('charges the price of the governorate it is going to', async () => {
+    // Beirut is not Akkar. An order that took the wrong row of the table would
+    // still be a valid order, which is why this is asserted on the total.
+    const harness = placer({ fees: { beirut: 200, akkar: 800 } });
+
+    const near = await placed(harness, { region: 'beirut' });
+    const far = await placed(harness, { region: 'akkar' });
+
+    expect(near.deliveryFee.cents).toBe(200);
+    expect(far.deliveryFee.cents).toBe(800);
+    expect(far.total.cents - near.total.cents).toBe(600);
   });
 });
 

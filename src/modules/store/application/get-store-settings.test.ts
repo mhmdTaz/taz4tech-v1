@@ -1,3 +1,4 @@
+import { sameEverywhere } from '@platform/regions';
 import { describe, expect, it, vi } from 'vitest';
 import type { StoreSettingsRepository } from '../contracts';
 import type { StoreSettings } from '../domain/store-settings';
@@ -12,7 +13,7 @@ const settings: StoreSettings = {
   contactPhone: '+96170123456',
   vatBasisPoints: 1100,
   commercialRegistryNumber: null,
-  deliveryFeeCents: 0,
+  deliveryFees: sameEverywhere(0),
 };
 
 const repositoryReturning = (value: StoreSettings | null): StoreSettingsRepository => ({

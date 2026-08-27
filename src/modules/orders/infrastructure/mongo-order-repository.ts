@@ -11,11 +11,12 @@
 import { LOCALES } from '@platform/locale';
 import type { Money } from '@platform/money';
 import { fromCents } from '@platform/money';
+import { REGIONS } from '@platform/regions';
 import { err, ok, type Result } from '@platform/result';
 import type { Collection, Db } from 'mongodb';
 import { z } from 'zod';
 import type { ListOrdersQuery, OrderConflict, OrderPage, OrderRepository } from '../contracts';
-import { ORDER_STATUSES, type Order, REGIONS } from '../domain/order';
+import { ORDER_STATUSES, type Order } from '../domain/order';
 
 export const ORDERS_COLLECTION = 'orders';
 export const COUNTERS_COLLECTION = 'counters';

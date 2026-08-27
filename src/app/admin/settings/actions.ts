@@ -1,5 +1,6 @@
 'use server';
 
+import { type ByRegion, REGIONS, type Region } from '@platform/regions';
 import { redirect } from 'next/navigation';
 import { getContainer } from '@/composition';
 import { requireAdmin } from '../session';
@@ -33,7 +34,10 @@ export const saveSettings = async (formData: FormData): Promise<void> => {
     contactPhone: field(formData, 'contactPhone'),
     commercialRegistryNumber: field(formData, 'commercialRegistryNumber'),
     vatPercent: field(formData, 'vatPercent'),
-    deliveryFee: field(formData, 'deliveryFee'),
+    // One box per governorate, named deliveryFee.<region>.
+    deliveryFees: Object.fromEntries(
+      REGIONS.map((region) => [region, field(formData, `deliveryFee.${region}`)]),
+    ) as ByRegion<string>,
   };
 
   const container = await getContainer();
@@ -44,14 +48,14 @@ export const saveSettings = async (formData: FormData): Promise<void> => {
     redirect(`${SETTINGS_PATH}?saved=1`);
   }
 
+  // Echoed back so nothing has to be retyped.
   const params = new URLSearchParams({
-    // Echoed back so nothing has to be retyped.
     name: form.name,
     contactPhone: form.contactPhone,
     commercialRegistryNumber: form.commercialRegistryNumber,
     vatPercent: form.vatPercent,
-    deliveryFee: form.deliveryFee,
   });
+  for (const region of REGIONS) params.set(`deliveryFee.${region}`, form.deliveryFees[region]);
 
   /*
    * `error` names the FIELD to point at, not the failure.
@@ -67,21 +71,21 @@ export const saveSettings = async (formData: FormData): Promise<void> => {
       : result.error.tag === 'vat_unparsable'
         ? 'vat'
         : result.error.tag === 'delivery_fee_unparsable'
-          ? 'fee'
+          ? `fee.${result.error.region}`
           : result.error.tag === 'not_configured'
             ? 'not_configured'
-            : domainField(result.error.reason.tag),
+            : domainField(result.error.reason),
   );
 
   redirect(`${SETTINGS_PATH}?${params.toString()}`);
 };
 
 /** Which box the domain was complaining about. */
-const domainField = (tag: string): string => {
-  if (tag === 'name_empty') return 'name';
-  if (tag === 'vat_out_of_range') return 'vat';
-  if (tag === 'delivery_fee_invalid') return 'fee';
-  if (tag === 'phone_not_e164') return 'phone';
+const domainField = (error: { readonly tag: string; readonly region?: Region }): string => {
+  if (error.tag === 'name_empty') return 'name';
+  if (error.tag === 'vat_out_of_range') return 'vat';
+  if (error.tag === 'delivery_fee_invalid') return `fee.${error.region}`;
+  if (error.tag === 'phone_not_e164') return 'phone';
   // no_locales and default_locale_not_offered cannot come from this form, which
   // never touches those fields. Reaching here means the stored settings are
   // already broken, and saying so beats blaming a box the operator just typed in.

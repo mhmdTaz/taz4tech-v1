@@ -1,3 +1,4 @@
+import { sameEverywhere } from '@platform/regions';
 import { type Db, MongoClient } from 'mongodb';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { scansCollection, usesIndex, winningStages } from '@/test-support/explain';
@@ -23,7 +24,7 @@ const settings = (overrides: Partial<StoreSettings> = {}): StoreSettings => ({
   contactPhone: '+96170123456',
   vatBasisPoints: 1100,
   commercialRegistryNumber: null,
-  deliveryFeeCents: 0,
+  deliveryFees: sameEverywhere(0),
   ...overrides,
 });
 
@@ -52,6 +53,75 @@ describe('MongoStoreSettingsRepository', () => {
 
     const found = await repository.findByStoreId('taz4tech');
     expect(found).toEqual(settings());
+  });
+
+  it('reads a document written before delivery was priced per governorate', async () => {
+    /*
+     * The migration, and the reason it is a read rather than a script.
+     *
+     * A document from before this change carries `deliveryFeeCents: 250` and no
+     * table. That number meant "this much, everywhere" — so that is exactly what
+     * it becomes, for all eight. A store that stopped booting because a field it
+     * never had is missing would be a migration disguised as a schema.
+     */
+    await db.collection(STORE_SETTINGS_COLLECTION).insertOne({
+      storeId: 'taz4tech',
+      name: 'Taz4Tech',
+      defaultLocale: 'en',
+      locales: ['en', 'ar', 'fr'],
+      siteUrl: 'https://taz4tech.com',
+      contactPhone: '+96170123456',
+      vatBasisPoints: 1100,
+      commercialRegistryNumber: null,
+      deliveryFeeCents: 250,
+    });
+
+    const found = await createMongoStoreSettingsRepository(db).findByStoreId('taz4tech');
+    expect(found?.deliveryFees).toEqual(sameEverywhere(250));
+  });
+
+  it('fills a governorate the table forgot from the old flat fee, not from zero', async () => {
+    // An absent price is a price nobody set. Reading it as free would quietly
+    // give away every delivery to that governorate.
+    await db.collection(STORE_SETTINGS_COLLECTION).insertOne({
+      storeId: 'taz4tech',
+      name: 'Taz4Tech',
+      defaultLocale: 'en',
+      locales: ['en', 'ar', 'fr'],
+      siteUrl: 'https://taz4tech.com',
+      contactPhone: '+96170123456',
+      vatBasisPoints: 1100,
+      commercialRegistryNumber: null,
+      deliveryFeeCents: 250,
+      deliveryFees: { beirut: 100 },
+    });
+
+    const found = await createMongoStoreSettingsRepository(db).findByStoreId('taz4tech');
+    expect(found?.deliveryFees.beirut).toBe(100);
+    expect(found?.deliveryFees.akkar).toBe(250);
+  });
+
+  it('drops the superseded flat fee when settings are saved', async () => {
+    // Leaving it behind would be a second, stale answer to what delivery costs,
+    // sitting in the document looking authoritative.
+    const collection = db.collection(STORE_SETTINGS_COLLECTION);
+    await collection.insertOne({ storeId: 'taz4tech', deliveryFeeCents: 250 });
+
+    await createMongoStoreSettingsRepository(db).save(
+      settings({ deliveryFees: sameEverywhere(400) }),
+    );
+
+    const raw = await collection.findOne({ storeId: 'taz4tech' });
+    expect(raw).not.toHaveProperty('deliveryFeeCents');
+    expect(raw?.deliveryFees).toEqual(sameEverywhere(400));
+  });
+
+  it('round-trips a table with a different price per governorate', async () => {
+    const repository = createMongoStoreSettingsRepository(db);
+    const fees = { ...sameEverywhere(300), beirut: 0, akkar: 1250 };
+    await repository.save(settings({ deliveryFees: fees }));
+
+    expect((await repository.findByStoreId('taz4tech'))?.deliveryFees).toEqual(fees);
   });
 
   it('returns null for a store that has not been seeded', async () => {

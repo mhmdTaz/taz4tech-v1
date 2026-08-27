@@ -24,31 +24,9 @@ import type { Locale } from '@platform/locale';
 import type { Money } from '@platform/money';
 import { compare, fromCents, isNegative } from '@platform/money';
 import { isE164 } from '@platform/phone';
+import type { Region } from '@platform/regions';
 
 export type OrderId = string;
-
-/**
- * Lebanon's eight governorates.
- *
- * A closed list rather than a free-text field: delivery is arranged per region,
- * and "Mount Lebanon" typed four different ways is four regions to anyone
- * counting. The customer's exact address goes in the lines below it.
- */
-export const REGIONS = [
-  'beirut',
-  'mount_lebanon',
-  'north',
-  'akkar',
-  'bekaa',
-  'baalbek_hermel',
-  'south',
-  'nabatieh',
-] as const;
-
-export type Region = (typeof REGIONS)[number];
-
-export const isRegion = (value: string): value is Region =>
-  (REGIONS as readonly string[]).includes(value);
 
 /**
  * The lifecycle.

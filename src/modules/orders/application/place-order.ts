@@ -38,16 +38,10 @@ import { formatOrderNumber } from '@platform/ids';
 import type { Locale } from '@platform/locale';
 import { fromCents, type Money } from '@platform/money';
 import { type PhoneError, parseLebanesePhone } from '@platform/phone';
+import { isRegion, type Region } from '@platform/regions';
 import { err, ok, type Result, unwrapOrThrow } from '@platform/result';
 import type { OrderRepository, StockLedger } from '../contracts';
-import {
-  createOrder,
-  isRegion,
-  type Order,
-  type OrderError,
-  type OrderLine,
-  type Region,
-} from '../domain/order';
+import { createOrder, type Order, type OrderError, type OrderLine } from '../domain/order';
 
 export type PlaceOrderInput = {
   readonly cart: Cart;
@@ -79,7 +73,14 @@ export type PlaceOrderDeps = {
   readonly repository: OrderRepository;
   readonly priceCart: PriceCart;
   readonly stock: StockLedger;
-  readonly deliveryFeeCents: () => Promise<number>;
+  /**
+   * What delivery costs to one governorate.
+   *
+   * Per region, because Beirut is not Akkar. The port takes the region rather
+   * than returning a table so the orders module never has to know that a table
+   * is how the shop happens to express it.
+   */
+  readonly deliveryFeeCents: (region: Region) => Promise<number>;
   readonly storeId: string;
   readonly now: () => Date;
   readonly nextId: () => EntityId<'Order'>;
@@ -193,7 +194,7 @@ const buildOrder = async (context: {
 }): Promise<Result<Order, PlaceOrderError>> => {
   const { deps, input, priced, phone, region, now, sequence } = context;
 
-  const feeCents = await deps.deliveryFeeCents();
+  const feeCents = await deps.deliveryFeeCents(region);
   /*
    * unwrapOrThrow, which is exactly what it is documented for: a boundary that
    * has already proven the value is fine. Every amount here is an integer sum of

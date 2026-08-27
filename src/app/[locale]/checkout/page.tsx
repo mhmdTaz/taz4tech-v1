@@ -1,6 +1,7 @@
-import { REGIONS } from '@modules/orders';
+import { deliveryFeeFor, deliverySpread } from '@modules/store';
 import { isLocale } from '@platform/locale';
 import { format as formatMoney } from '@platform/money';
+import { REGIONS } from '@platform/regions';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
@@ -70,8 +71,24 @@ export default async function CheckoutPage({ params, searchParams }: PageProps) 
    */
   const idempotencyKey = crypto.randomUUID();
 
-  const deliveryFeeCents = priced.lines.length > 0 ? await container.orders.deliveryFeeCents() : 0;
-  const totalCents = priced.subtotalCents + deliveryFeeCents;
+  /*
+   * DELIVERY IS PRICED PER GOVERNORATE, AND NOBODY HAS CHOSEN ONE YET.
+   *
+   * The page is rendered before the form is filled, so the honest quote depends
+   * on the table. When every governorate costs the same — which is what a flat
+   * rate looks like now — there is one number and it is exact. When they differ,
+   * quoting one would be choosing a governorate on the customer's behalf, so the
+   * summary says "from" and each option in the list carries its own price.
+   *
+   * Either way the ORDER is priced from the region that was actually posted, so
+   * the total on the confirmation is never a number this page invented.
+   */
+  const settings = await container.store.getStoreSettings();
+  const fees = settings.ok ? settings.value : null;
+  const spread = fees === null ? { min: 0, max: 0 } : deliverySpread(fees);
+  const oneFeeEverywhere = spread.min === spread.max;
+  const feeFor = (region: (typeof REGIONS)[number]): number =>
+    fees === null ? 0 : deliveryFeeFor(fees, region);
 
   const error = one(query.error);
   const errorMessage =
@@ -166,8 +183,12 @@ export default async function CheckoutPage({ params, searchParams }: PageProps) 
               >
                 <option value="">—</option>
                 {REGIONS.map((region) => (
+                  // The price is IN the option. No JavaScript, no reload, and the
+                  // cost is in front of the customer at the moment they choose.
                   <option key={region} value={region}>
-                    {tRegion(region)}
+                    {oneFeeEverywhere
+                      ? tRegion(region)
+                      : `${tRegion(region)} — ${feeFor(region) === 0 ? t('free') : money(feeFor(region))}`}
                   </option>
                 ))}
               </select>
@@ -259,12 +280,20 @@ export default async function CheckoutPage({ params, searchParams }: PageProps) 
             <div className="flex justify-between">
               <dt className="text-muted">{t('delivery')}</dt>
               <dd className="tabular-nums text-ink">
-                {deliveryFeeCents === 0 ? t('free') : money(deliveryFeeCents)}
+                {oneFeeEverywhere
+                  ? spread.min === 0
+                    ? t('free')
+                    : money(spread.min)
+                  : t('deliveryByRegion')}
               </dd>
             </div>
             <div className="flex justify-between border-hairline border-t pt-2 text-base font-semibold">
               <dt className="text-ink">{t('total')}</dt>
-              <dd className="tabular-nums text-ink">{money(totalCents)}</dd>
+              <dd className="tabular-nums text-ink">
+                {oneFeeEverywhere
+                  ? money(priced.subtotalCents + spread.min)
+                  : t('totalFrom', { amount: money(priced.subtotalCents + spread.min) })}
+              </dd>
             </div>
           </dl>
 

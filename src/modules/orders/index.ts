@@ -9,6 +9,7 @@
 
 import type { EntityId } from '@platform/ids';
 import type { Db } from '@platform/mongo';
+import type { Region } from '@platform/regions';
 import { makePlaceOrder, type PlaceOrder, type PlaceOrderDeps } from './application/place-order';
 import {
   type ListOrders,
@@ -56,15 +57,12 @@ export type {
   OrderId,
   OrderLine,
   OrderStatus,
-  Region,
 } from './domain/order';
 export {
   canTransition,
   createOrder,
   holdsStock,
-  isRegion,
   ORDER_STATUSES,
-  REGIONS,
   totalItems,
 } from './domain/order';
 
@@ -75,13 +73,14 @@ export type OrdersModule = {
   readonly findById: (id: string) => Promise<import('./domain/order').Order | null>;
   readonly findByNumber: (number: string) => Promise<import('./domain/order').Order | null>;
   /**
-   * What delivery will cost on this order.
+   * What delivery will cost to one governorate.
    *
    * Exposed so the checkout page can show the same number the order will be
    * written with — quoting a total the order then disagrees with is the failure
-   * this whole module is careful about.
+   * this whole module is careful about. It takes the region because that is the
+   * only thing the price depends on, and the page knows it before the order does.
    */
-  readonly deliveryFeeCents: () => Promise<number>;
+  readonly deliveryFeeCents: (region: Region) => Promise<number>;
   readonly ensureIndexes: () => Promise<void>;
 };
 
