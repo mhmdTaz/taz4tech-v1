@@ -3,6 +3,7 @@
  * layer depends only on them.
  */
 
+import type { Collection, CollectionId, CollectionStatus } from '../domain/collection';
 import type { Product, ProductId, ProductStatus } from '../domain/product';
 
 export type ProductPage = {
@@ -52,13 +53,42 @@ export type ProductFilters = {
   readonly priceMaxCents?: number;
 };
 
+/**
+ * A collection's membership clause.
+ *
+ * `(matches the rules) OR (is pinned)`. It is a separate parameter from
+ * `filters` precisely because the two combine differently: membership is ORed
+ * internally and then ANDed with whatever the customer filtered, so a pinned
+ * product cannot survive a filter it does not match.
+ */
+export type MembershipClause = {
+  readonly rules: ProductFilters;
+  readonly pinnedProductIds: readonly ProductId[];
+};
+
 export type SearchProductsQuery = ListProductsQuery & {
   readonly filters: ProductFilters;
+  readonly membership?: MembershipClause;
+  /** Pinned-first ordering, for a curated collection. */
+  readonly pinnedFirst?: readonly ProductId[];
 };
 
 export type SearchResult = ProductPage & {
   readonly facets: Facets;
 };
+
+export type ListCollectionsQuery = {
+  readonly storeId: string;
+  readonly status?: CollectionStatus;
+};
+
+export interface CollectionRepository {
+  findBySlug(storeId: string, slug: string): Promise<Collection | null>;
+  findById(storeId: string, id: CollectionId): Promise<Collection | null>;
+  /** Navigation order, already sorted. */
+  list(query: ListCollectionsQuery): Promise<Collection[]>;
+  save(collection: Collection): Promise<void>;
+}
 
 /**
  * Reads a spreadsheet into rows of text.

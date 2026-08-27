@@ -230,6 +230,32 @@ store settings are real configuration, three fake laptops are not. The fixtures
 cover the awkward shapes on purpose — an incomplete variant matrix, a live offer,
 a product with no imagery, and a draft that must stay hidden.
 
+## Collections
+
+```
+/en/collections
+/en/collections/laptops?brand=Lenovo&q=ideapad
+```
+
+**A collection is a saved query plus pinned products** — not a copy of a product
+list. It holds the same filter vocabulary the listing page uses, so a collection
+page inherits search, facets, pagination and every empty state unchanged rather
+than growing a second listing path that drifts from the first. Import fifty new
+Lenovo laptops and "Laptops" contains them, with nobody editing anything.
+
+**Membership is `(matches the rules) OR (is pinned)`; the customer's filters are
+ANDed on top.** That nesting is the whole design: a pinned product must appear in
+its collection even though no rule selects it, and must still disappear when the
+customer filters to something it does not match. A pinned Dell cannot survive
+"Lenovo only".
+
+**A collection with neither rules nor pinned products is rejected** — it can never
+contain anything, and publishing navigation that leads to an empty page reads to
+a customer as a broken site rather than an empty category.
+
+Pinned ids are checked to exist on write. A dangling id is otherwise silent: the
+collection just shows one product fewer than the curator arranged.
+
 ## Search and facets
 
 ```

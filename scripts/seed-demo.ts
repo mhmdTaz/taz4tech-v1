@@ -14,7 +14,7 @@
  */
 
 import { getContainer } from '../src/composition/index.js';
-import type { Product } from '../src/modules/catalog/index.js';
+import type { Collection, Product } from '../src/modules/catalog/index.js';
 import { fromCents } from '../src/platform/money/index.js';
 import { closeMongo } from '../src/platform/mongo/index.js';
 import { unwrapOrThrow } from '../src/platform/result/index.js';
@@ -219,7 +219,72 @@ const main = async (): Promise<void> => {
     written++;
   }
 
-  console.warn(`Seeded ${written} demo products into "${container.config.mongo.database}".`);
+  const collections: Collection[] = [
+    {
+      storeId,
+      id: '01JDEMOCOLLLAPTOPS0000AAAA',
+      slug: 'laptops',
+      title: { en: 'Laptops', ar: 'حواسيب محمولة', fr: 'Ordinateurs portables' },
+      description: { en: 'Every laptop we carry.' },
+      status: 'active',
+      // Rule-based: import more Lenovo laptops and this stays correct with
+      // nobody editing anything.
+      rules: { brands: ['Lenovo'] },
+      pinnedProductIds: [],
+      sort: 'newest',
+      position: 0,
+      createdAt,
+      updatedAt: now,
+    },
+    {
+      storeId,
+      id: '01JDEMOCOLLDEALS000000BBBB',
+      slug: 'deals',
+      title: { en: 'Deals', ar: 'عروض' },
+      description: { en: 'Everything under $500.' },
+      status: 'active',
+      rules: { priceMaxCents: 50000 },
+      // A curated addition that the price rule alone would miss.
+      pinnedProductIds: ['01JDEMOLAPTOP000000000AAAA'],
+      sort: 'price-asc',
+      position: 1,
+      createdAt,
+      updatedAt: now,
+    },
+    {
+      storeId,
+      id: '01JDEMOCOLLHIDDEN00000CCCC',
+      slug: 'staff-picks',
+      title: { en: 'Staff Picks' },
+      description: { en: 'Should never appear on the storefront.' },
+      // A draft, so the e2e suite can prove unpublished collections stay hidden.
+      status: 'draft',
+      rules: {},
+      pinnedProductIds: ['01JDEMOCABLE0000000000CCCC'],
+      sort: 'manual',
+      position: 2,
+      createdAt,
+      updatedAt: now,
+    },
+  ];
+
+  let savedCollections = 0;
+  for (const collection of collections) {
+    const result = await container.catalog.saveCollection(collection);
+    if (!result.ok) {
+      console.error(
+        `Rejected collection "${collection.slug}":`,
+        JSON.stringify(result.error, null, 2),
+      );
+      process.exitCode = 1;
+      return;
+    }
+    savedCollections++;
+  }
+
+  console.warn(
+    `Seeded ${written} demo products and ${savedCollections} collections into "${container.config.mongo.database}".`,
+  );
 };
 
 main()

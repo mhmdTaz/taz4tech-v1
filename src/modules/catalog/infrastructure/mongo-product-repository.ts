@@ -281,6 +281,109 @@ const toFacetValues = (rows: { _id: unknown; count: number }[]): FacetValue[] =>
     .map((row) => ({ value: row._id, count: row.count }))
     .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
 
+/**
+ * The clauses every facet must respect: tenant, status, search terms, and the
+ * collection a page is scoped to.
+ *
+ * Collection membership belongs HERE rather than in a facet fragment, because it
+ * is not something the customer can toggle. Put it in a fragment and "Laptops"
+ * would report brand counts drawn from the whole catalogue, offering filters
+ * that return nothing.
+ */
+const buildBaseMatch = (query: SearchProductsQuery): Record<string, unknown> => {
+  const base: Record<string, unknown> = { storeId: query.storeId };
+  if (query.status !== undefined) base.status = query.status;
+
+  const search = query.filters.search;
+  if (search !== undefined && search.trim().length > 0) {
+    const { terms } = expandSearchTerms(search);
+    // Space-separated terms are OR in a $text search, which is exactly what
+    // synonym expansion wants: any of them is a hit.
+    if (terms.length > 0) base.$text = { $search: terms.join(' ') };
+  }
+
+  const membership = query.membership;
+  if (membership !== undefined) {
+    const ruleFragments = [...filterFragments(membership.rules).values()];
+    const clauses: Record<string, unknown>[] = [];
+    if (ruleFragments.length > 0) clauses.push({ $and: ruleFragments });
+    if (membership.pinnedProductIds.length > 0) {
+      clauses.push({ _id: { $in: [...membership.pinnedProductIds] } });
+    }
+    // No clauses would match everything, turning an empty collection into the
+    // whole catalogue. The domain forbids that shape; this is the second line.
+    base.$or = clauses.length > 0 ? clauses : [{ _id: { $in: [] } }];
+  }
+
+  return base;
+};
+
+/** One $facet branch per SELECTED option axis, each ignoring its own filter. */
+const buildOptionBranches = (
+  fragments: ReadonlyMap<string, Record<string, unknown>>,
+  optionNames: readonly string[],
+): Record<string, unknown[]> => {
+  const branches: Record<string, unknown[]> = {};
+  for (const name of optionNames) {
+    branches[`option_${name}`] = [
+      { $match: combine(fragments, `option:${name}`) },
+      { $unwind: '$variants' },
+      { $unwind: '$variants.options' },
+      { $match: { 'variants.options.name': name } },
+      // addToSet on the product id, so a product with three Black variants
+      // counts once against Black rather than three times.
+      { $group: { _id: '$variants.options.value', count: { $addToSet: '$_id' } } },
+      { $project: { count: { $size: '$count' } } },
+    ];
+  }
+  return branches;
+};
+
+/** Turn the $facet output into the Facets the application layer expects. */
+const readFacets = (
+  branch: (name: string) => unknown[],
+  optionNames: readonly string[],
+): Facets => {
+  const otherRows = branch('optionsOther') as {
+    _id: { name?: unknown; value?: unknown };
+    count: number;
+  }[];
+
+  const byName = new Map<string, { _id: unknown; count: number }[]>();
+  for (const row of otherRows) {
+    const name = row._id?.name;
+    const value = row._id?.value;
+    if (typeof name !== 'string' || typeof value !== 'string') continue;
+    // A selected axis is counted by its own branch, which ignores its own
+    // filter; drop it from the generic results.
+    if (optionNames.includes(name)) continue;
+    const rows = byName.get(name) ?? [];
+    rows.push({ _id: value, count: row.count });
+    byName.set(name, rows);
+  }
+
+  for (const name of optionNames) {
+    byName.set(name, branch(`option_${name}`) as { _id: unknown; count: number }[]);
+  }
+
+  const options: OptionFacet[] = [];
+  for (const [name, rows] of byName) {
+    const values = toFacetValues(rows);
+    if (values.length > 0) options.push({ name, values });
+  }
+
+  const priceRow = (branch('price') as { minCents?: number; maxCents?: number }[])[0];
+
+  return {
+    brands: toFacetValues(branch('brands') as { _id: unknown; count: number }[]),
+    options: options.sort((a, b) => a.name.localeCompare(b.name)),
+    priceRange:
+      priceRow?.minCents === undefined || priceRow.maxCents === undefined
+        ? null
+        : { minCents: priceRow.minCents, maxCents: priceRow.maxCents },
+  };
+};
+
 export const createMongoProductRepository = (db: Db): ProductRepository => {
   const collection: Collection<ProductDocumentShape> = db.collection(PRODUCTS_COLLECTION);
 
@@ -336,44 +439,13 @@ export const createMongoProductRepository = (db: Db): ProductRepository => {
 
     async search(query: SearchProductsQuery): Promise<SearchResult> {
       const fragments = filterFragments(query.filters);
-
-      /*
-       * The base match is everything a facet must NOT ignore: the tenant, the
-       * status, and the search terms. $text has to live in the first stage of
-       * the pipeline, which is why it belongs here rather than in a fragment.
-       */
-      const base: Record<string, unknown> = { storeId: query.storeId };
-      if (query.status !== undefined) base.status = query.status;
-
-      const search = query.filters.search;
-      if (search !== undefined && search.trim().length > 0) {
-        const { terms } = expandSearchTerms(search);
-        // Space-separated terms are OR in a $text search, which is what synonym
-        // expansion wants: any of them is a hit.
-        if (terms.length > 0) base.$text = { $search: terms.join(' ') };
-      }
-
       const optionNames = [...new Set((query.filters.options ?? []).map((o) => o.name))];
-
       const pageMatch = combine(fragments);
       const cursorClause = query.cursor === undefined ? {} : { _id: { $lt: query.cursor } };
 
-      const optionBranches: Record<string, unknown[]> = {};
-      for (const name of optionNames.length > 0 ? optionNames : ['__none__']) {
-        if (name === '__none__') continue;
-        optionBranches[`option_${name}`] = [
-          { $match: combine(fragments, `option:${name}`) },
-          { $unwind: '$variants' },
-          { $unwind: '$variants.options' },
-          { $match: { 'variants.options.name': name } },
-          { $group: { _id: '$variants.options.value', count: { $addToSet: '$_id' } } },
-          { $project: { count: { $size: '$count' } } },
-        ];
-      }
-
       const [result] = await collection
         .aggregate<Record<string, unknown[]>>([
-          { $match: base },
+          { $match: buildBaseMatch(query) },
           {
             $facet: {
               page: [
@@ -386,13 +458,9 @@ export const createMongoProductRepository = (db: Db): ProductRepository => {
                 { $group: { _id: '$brand', count: { $sum: 1 } } },
               ],
               /*
-               * Counts for every option axis that is NOT currently filtered.
-               *
-               * A selected axis gets its own branch below, computed with its own
-               * filter removed so the customer can switch values. Everything
-               * else is counted with all filters applied, so choosing a brand
-               * narrows the colours — which is what makes faceted browsing feel
-               * like it is responding.
+               * Counts for every axis that is NOT currently filtered, with all
+               * filters applied — so choosing a brand narrows the colours, which
+               * is what makes faceted browsing feel like it is responding.
                */
               optionsOther: [
                 { $match: pageMatch },
@@ -401,8 +469,6 @@ export const createMongoProductRepository = (db: Db): ProductRepository => {
                 {
                   $group: {
                     _id: { name: '$variants.options.name', value: '$variants.options.value' },
-                    // addToSet on the product id, so a product with three Black
-                    // variants counts ONCE against Black rather than three times.
                     products: { $addToSet: '$_id' },
                   },
                 },
@@ -419,7 +485,7 @@ export const createMongoProductRepository = (db: Db): ProductRepository => {
                   },
                 },
               ],
-              ...optionBranches,
+              ...buildOptionBranches(fragments, optionNames),
             },
           },
         ])
@@ -431,49 +497,10 @@ export const createMongoProductRepository = (db: Db): ProductRepository => {
       const hasMore = docs.length > query.limit;
       const page = hasMore ? docs.slice(0, query.limit) : docs;
 
-      const otherRows = branch('optionsOther') as {
-        _id: { name?: unknown; value?: unknown };
-        count: number;
-      }[];
-
-      const byName = new Map<string, { _id: unknown; count: number }[]>();
-      for (const row of otherRows) {
-        const name = row._id?.name;
-        const value = row._id?.value;
-        if (typeof name !== 'string' || typeof value !== 'string') continue;
-        // A selected axis is counted by its own branch instead, which ignores
-        // its own filter; drop it from the generic results.
-        if (optionNames.includes(name)) continue;
-        const rows = byName.get(name) ?? [];
-        rows.push({ _id: value, count: row.count });
-        byName.set(name, rows);
-      }
-
-      for (const name of optionNames) {
-        byName.set(name, branch(`option_${name}`) as { _id: unknown; count: number }[]);
-      }
-
-      const options: OptionFacet[] = [];
-      for (const [name, rows] of byName) {
-        const values = toFacetValues(rows);
-        if (values.length > 0) options.push({ name, values });
-      }
-
-      const priceRow = (branch('price') as { minCents?: number; maxCents?: number }[])[0];
-
-      const facets: Facets = {
-        brands: toFacetValues(branch('brands') as { _id: unknown; count: number }[]),
-        options: options.sort((a, b) => a.name.localeCompare(b.name)),
-        priceRange:
-          priceRow?.minCents === undefined || priceRow.maxCents === undefined
-            ? null
-            : { minCents: priceRow.minCents, maxCents: priceRow.maxCents },
-      };
-
       return {
         products: page.map((doc) => toDomain(doc, `${query.storeId}/${doc._id}`)),
         nextCursor: hasMore ? (page[page.length - 1]?._id ?? null) : null,
-        facets,
+        facets: readFacets(branch, optionNames),
       };
     },
 

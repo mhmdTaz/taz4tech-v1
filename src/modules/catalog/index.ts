@@ -8,17 +8,37 @@
 
 import type { EntityId } from '@platform/ids';
 import type { Db } from '@platform/mongo';
+import {
+  type GetCollection,
+  type GetCollectionProducts,
+  type ListCollections,
+  makeGetCollection,
+  makeGetCollectionProducts,
+  makeListCollections,
+} from './application/get-collection';
 import { type GetProductBySlug, makeGetProductBySlug } from './application/get-product-by-slug';
 import { type ImportProducts, makeImportProducts } from './application/import-products';
 import { type ListProducts, makeListProducts } from './application/list-products';
+import { makeSaveCollection, type SaveCollection } from './application/save-collection';
 import { makeSaveProduct, type SaveProduct } from './application/save-product';
 import { makeSearchProducts, type SearchProducts } from './application/search-products';
+import {
+  createMongoCollectionRepository,
+  ensureCollectionIndexes,
+} from './infrastructure/mongo-collection-repository';
 import {
   createMongoProductRepository,
   ensureProductIndexes,
 } from './infrastructure/mongo-product-repository';
 import { createXlsxWorkbookReader } from './infrastructure/xlsx-workbook-reader';
 
+export type {
+  GetCollection,
+  GetCollectionError,
+  GetCollectionProducts,
+  GetCollectionProductsError,
+  ListCollections,
+} from './application/get-collection';
 export type { GetProductBySlug, GetProductBySlugError } from './application/get-product-by-slug';
 export type {
   ColumnMapping,
@@ -60,6 +80,7 @@ export {
   productPath,
   productUrl,
 } from './application/product-structured-data';
+export type { SaveCollection, SaveCollectionError } from './application/save-collection';
 export type { SaveProduct, SaveProductError } from './application/save-product';
 export type {
   SearchProducts,
@@ -68,9 +89,12 @@ export type {
 } from './application/search-products';
 export { MAX_FILTER_VALUES } from './application/search-products';
 export type {
+  CollectionRepository,
   Facets,
   FacetValue,
+  ListCollectionsQuery,
   ListProductsQuery,
+  MembershipClause,
   OptionFacet,
   ProductFilters,
   ProductPage,
@@ -78,6 +102,23 @@ export type {
   SearchProductsQuery,
   SearchResult,
 } from './contracts';
+export type {
+  Collection,
+  CollectionError,
+  CollectionId,
+  CollectionRules,
+  CollectionSort,
+  CollectionStatus,
+} from './domain/collection';
+export {
+  COLLECTION_SORTS,
+  COLLECTION_STATUSES,
+  compareForNavigation,
+  createCollection,
+  hasRules,
+  isFullyCurated,
+  isPublished,
+} from './domain/collection';
 export type {
   Media,
   Product,
@@ -109,6 +150,10 @@ export type CatalogModule = {
   readonly saveProduct: SaveProduct;
   readonly importProducts: ImportProducts;
   readonly searchProducts: SearchProducts;
+  readonly getCollection: GetCollection;
+  readonly listCollections: ListCollections;
+  readonly getCollectionProducts: GetCollectionProducts;
+  readonly saveCollection: SaveCollection;
   readonly ensureIndexes: () => Promise<void>;
 };
 
@@ -119,19 +164,32 @@ export const createCatalogModule = (deps: {
   nextId: () => EntityId<'Product'>;
 }): CatalogModule => {
   const repository = createMongoProductRepository(deps.db);
+  const collections = createMongoCollectionRepository(deps.db);
   const wiring = { repository, storeId: deps.storeId };
+  const collectionWiring = { repository: collections, storeId: deps.storeId };
 
   return {
     getProductBySlug: makeGetProductBySlug(wiring),
     listProducts: makeListProducts(wiring),
     saveProduct: makeSaveProduct({ ...wiring, now: deps.now }),
     searchProducts: makeSearchProducts(wiring),
+    getCollection: makeGetCollection(collectionWiring),
+    listCollections: makeListCollections(collectionWiring),
+    getCollectionProducts: makeGetCollectionProducts(wiring),
+    saveCollection: makeSaveCollection({
+      repository: collections,
+      products: repository,
+      storeId: deps.storeId,
+    }),
     importProducts: makeImportProducts({
       ...wiring,
       reader: createXlsxWorkbookReader(),
       now: deps.now,
       nextId: deps.nextId,
     }),
-    ensureIndexes: () => ensureProductIndexes(deps.db),
+    ensureIndexes: async () => {
+      await ensureProductIndexes(deps.db);
+      await ensureCollectionIndexes(deps.db);
+    },
   };
 };

@@ -50,6 +50,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
       alternates: languagesFor((locale) => `/${locale}/products`),
     },
+    {
+      url: absolute('/en/collections'),
+      changeFrequency: 'weekly',
+      priority: 0.8,
+      alternates: languagesFor((locale) => `/${locale}/collections`),
+    },
   ];
 
   /*
@@ -73,6 +79,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     cursor = page.value.nextCursor ?? undefined;
   } while (cursor !== undefined);
 
+  /*
+   * Collections are navigation targets with their own indexable content, so they
+   * belong in the sitemap alongside products. listCollections is active-only and
+   * the status parameter cannot widen it, so a draft cannot leak here.
+   */
+  const collections = await container.catalog.listCollections();
+  const collectionEntries: MetadataRoute.Sitemap = collections.map((collection) => ({
+    url: absolute(`/en/collections/${collection.slug}`),
+    lastModified: collection.updatedAt,
+    changeFrequency: 'weekly',
+    priority: 0.7,
+    alternates: languagesFor((locale) => `/${locale}/collections/${collection.slug}`),
+  }));
+
   const productEntries: MetadataRoute.Sitemap = products.map((product) => ({
     url: absolute(productPath('en', product.slug)),
     lastModified: product.updatedAt,
@@ -81,5 +101,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     alternates: languagesFor((locale) => productPath(locale, product.slug)),
   }));
 
-  return [...staticEntries, ...productEntries];
+  return [...staticEntries, ...collectionEntries, ...productEntries];
 }

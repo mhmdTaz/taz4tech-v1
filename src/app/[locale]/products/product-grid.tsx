@@ -1,3 +1,4 @@
+import type { Collection } from '@modules/catalog';
 import {
   defaultVariant,
   hasPriceRange,
@@ -33,9 +34,20 @@ import {
 export const ProductGrid = async ({
   locale,
   searchParams,
+  collection,
+  basePath,
 }: {
   locale: Locale;
   searchParams: Promise<RawSearchParams>;
+  /**
+   * When present, the grid lists this collection instead of the whole
+   * catalogue. Everything else — search box, facets, pagination, empty states —
+   * is identical, which is the reason a collection is modelled as a saved query
+   * rather than as its own listing path.
+   */
+  collection?: Collection;
+  /** The URL facet links are built against. Defaults to the products listing. */
+  basePath?: string;
 }) => {
   await connection();
 
@@ -45,7 +57,7 @@ export const ProductGrid = async ({
 
   let page: Awaited<ReturnType<typeof loadPage>>;
   try {
-    page = await loadPage(params);
+    page = await loadPage(params, collection);
   } catch {
     return (
       <Panel>
@@ -62,7 +74,7 @@ export const ProductGrid = async ({
     );
   }
 
-  const base = `/${locale}/products`;
+  const base = basePath ?? `/${locale}/products`;
   const filtering = hasActiveFilters(params);
   const { facets } = page.value;
   const now = new Date();
@@ -208,14 +220,18 @@ export const ProductGrid = async ({
   );
 };
 
-const loadPage = async (params: ReturnType<typeof parseListingParams>) => {
+const loadPage = async (params: ReturnType<typeof parseListingParams>, collection?: Collection) => {
   const container = await getContainer();
-  return container.catalog.searchProducts({
+  const input = {
     ...(params.q.length > 0 ? { search: params.q } : {}),
     ...(params.brands.length > 0 ? { brands: params.brands } : {}),
     ...(params.options.length > 0 ? { options: params.options } : {}),
     ...(params.minCents === undefined ? {} : { priceMinCents: params.minCents }),
     ...(params.maxCents === undefined ? {} : { priceMaxCents: params.maxCents }),
     ...(params.cursor === undefined ? {} : { cursor: params.cursor }),
-  });
+  };
+
+  return collection === undefined
+    ? container.catalog.searchProducts(input)
+    : container.catalog.getCollectionProducts(collection, input);
 };
