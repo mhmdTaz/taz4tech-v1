@@ -11,10 +11,11 @@
  *    let a missing field travel all the way to a rendered page as `undefined`.
  */
 
+import { LOCALES } from '@platform/locale';
 import type { Collection, Db } from 'mongodb';
 import { z } from 'zod';
 import type { StoreSettingsRepository } from '../contracts';
-import { createStoreSettings, LOCALES, type StoreSettings } from '../domain/store-settings';
+import { createStoreSettings, type StoreSettings } from '../domain/store-settings';
 
 export const STORE_SETTINGS_COLLECTION = 'storeSettings';
 

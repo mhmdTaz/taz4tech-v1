@@ -11,6 +11,7 @@
  * in here is a service locator wearing a different hat.
  */
 
+import { type CatalogModule, createCatalogModule } from '@modules/catalog';
 import { createStoreModule, type StoreModule } from '@modules/store';
 import { type Clock, systemClock } from '@platform/clock';
 import { type Config, getConfig } from '@platform/config';
@@ -27,6 +28,7 @@ export type Container = {
   readonly logger: Logger;
   readonly flags: Flags;
   readonly store: StoreModule;
+  readonly catalog: CatalogModule;
 };
 
 export const buildContainer = async (): Promise<Container> => {
@@ -44,8 +46,9 @@ export const buildContainer = async (): Promise<Container> => {
   const flags = createFlags();
 
   const store = createStoreModule({ db, storeId: config.storeId });
+  const catalog = createCatalogModule({ db, storeId: config.storeId });
 
-  return { config, db, clock, ids, logger, flags, store };
+  return { config, db, clock, ids, logger, flags, store, catalog };
 };
 
 /**

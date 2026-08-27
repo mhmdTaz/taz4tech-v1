@@ -17,15 +17,8 @@ import {
 export type { GetStoreSettings, GetStoreSettingsError } from './application/get-store-settings';
 export type { SaveStoreSettings, SaveStoreSettingsError } from './application/save-store-settings';
 export type { StoreSettingsRepository } from './contracts';
-export type { Locale, StoreSettings, StoreSettingsError } from './domain/store-settings';
-export {
-  createStoreSettings,
-  directionOf,
-  isLocale,
-  LOCALES,
-  showsRegistryNumber,
-  vatRate,
-} from './domain/store-settings';
+export type { StoreSettings, StoreSettingsError } from './domain/store-settings';
+export { createStoreSettings, showsRegistryNumber, vatRate } from './domain/store-settings';
 
 export type StoreModule = {
   readonly getStoreSettings: GetStoreSettings;

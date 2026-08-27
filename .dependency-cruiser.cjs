@@ -23,7 +23,7 @@ module.exports = {
         'domain type, the type belongs in platform or the dependency is inverted.',
       severity: 'error',
       from: { path: '^src/platform/' },
-      to: { path: '^src/(app|modules|ui|composition)/' },
+      to: { path: '^src/(app|modules|ui|composition|i18n)/' },
     },
     {
       name: 'ui-is-pure',
@@ -32,7 +32,7 @@ module.exports = {
         'routing. Pass data in as props; do not fetch it.',
       severity: 'error',
       from: { path: '^src/ui/' },
-      to: { path: '^src/(app|modules|composition)/' },
+      to: { path: '^src/(app|modules|composition|i18n)/' },
     },
     {
       name: 'modules-never-import-app',
@@ -41,7 +41,7 @@ module.exports = {
         'needs a request value, take it as a use-case parameter.',
       severity: 'error',
       from: { path: '^src/modules/' },
-      to: { path: '^src/(app|composition)/' },
+      to: { path: '^src/(app|composition|i18n)/' },
     },
     {
       name: 'modules-never-import-ui',
@@ -191,7 +191,7 @@ module.exports = {
 
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: '([.]test[.]ts|[.]spec[.]ts|__tests__|[.]next)' },
+    exclude: { path: '([.]test[.]ts|[.]spec[.]ts|__tests__|[.]next|^src/test-support/)' },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: 'tsconfig.json' },
     enhancedResolveOptions: {

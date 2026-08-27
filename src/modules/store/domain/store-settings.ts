@@ -6,16 +6,8 @@
  * layer mutation testing runs against, so every branch here has to matter.
  */
 
+import type { Locale } from '@platform/locale';
 import { err, ok, type Result } from '@platform/result';
-
-export const LOCALES = ['en', 'ar', 'fr'] as const;
-export type Locale = (typeof LOCALES)[number];
-
-export const isLocale = (value: unknown): value is Locale =>
-  typeof value === 'string' && (LOCALES as readonly string[]).includes(value);
-
-/** ar is written right-to-left; en and fr are not. Drives dir= on <html>. */
-export const directionOf = (locale: Locale): 'ltr' | 'rtl' => (locale === 'ar' ? 'rtl' : 'ltr');
 
 export type StoreSettings = {
   readonly storeId: string;
