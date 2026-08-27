@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { hasAdminSession, IMPORT_PATH, requireAdminEnabled } from '../session';
+import { hasAdminSession, PRODUCTS_PATH, requireAdminEnabled } from '../session';
 import { LoginForm } from './login-form';
 
 /** Reads a cookie, so there is nothing here to prerender. */
@@ -10,7 +10,7 @@ export default async function LoginPage() {
 
   // Already signed in: show the work, not a login form. Without this, a
   // bookmark to /admin/login is a dead end for someone who is already in.
-  if (await hasAdminSession()) redirect(IMPORT_PATH);
+  if (await hasAdminSession()) redirect(PRODUCTS_PATH);
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-8 px-6 py-16">

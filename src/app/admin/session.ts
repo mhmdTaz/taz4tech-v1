@@ -28,6 +28,7 @@ import { notFound, redirect } from 'next/navigation';
 const COOKIE_NAME = 'taz_admin';
 export const LOGIN_PATH = '/admin/login';
 export const IMPORT_PATH = '/admin/import';
+export const PRODUCTS_PATH = '/admin/products';
 
 /**
  * Two limits, because one is spoofable and one is not.

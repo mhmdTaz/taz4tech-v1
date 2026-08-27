@@ -44,6 +44,7 @@ const productRepo = () => {
     findBySku: vi.fn(),
     findBySlugs: vi.fn(),
     findBySkus: vi.fn(async () => []),
+    findByIds: vi.fn(async () => []),
     list: vi.fn(),
     save: vi.fn(),
     search: vi.fn(async (query: SearchProductsQuery) => {
@@ -238,6 +239,7 @@ describe('getCollectionProducts', () => {
       findBySku: vi.fn(),
       findBySlugs: vi.fn(),
       findBySkus: vi.fn(async () => []),
+      findByIds: vi.fn(async () => []),
       list: vi.fn(),
       save: vi.fn(),
       search: vi.fn().mockRejectedValue(new Error('connection refused')),

@@ -39,6 +39,7 @@ const wiring = (options: { existing?: Collection | null; productExists?: boolean
     findBySku: vi.fn(),
     findBySlugs: vi.fn(),
     findBySkus: vi.fn(async () => []),
+    findByIds: vi.fn(async () => []),
     list: vi.fn(),
     save: vi.fn(),
     search: vi.fn(),

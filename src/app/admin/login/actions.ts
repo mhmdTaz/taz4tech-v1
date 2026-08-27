@@ -1,7 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { IMPORT_PATH, LOGIN_PATH, requireAdminEnabled, signIn, signOut } from '../session';
+import { LOGIN_PATH, PRODUCTS_PATH, requireAdminEnabled, signIn, signOut } from '../session';
 
 export type LoginState = { readonly error: string | null };
 
@@ -28,7 +28,7 @@ export const attemptLogin = async (
 
   // Outside the try/catch pattern deliberately: redirect() signals by throwing,
   // so it must be the last thing and must not sit inside anything that catches.
-  redirect(IMPORT_PATH);
+  redirect(PRODUCTS_PATH);
 };
 
 export const logOut = async (): Promise<void> => {

@@ -190,6 +190,39 @@ describe('MongoProductRepository', () => {
     expect(await repository.findById('other', id(7))).toBeNull();
   });
 
+  describe('findByIds', () => {
+    it('returns every match in one query', async () => {
+      const repository = createMongoProductRepository(db);
+      await repository.save(productWithSku(1, 'a'));
+      await repository.save(productWithSku(2, 'b'));
+
+      const found = await repository.findByIds('taz4tech', [id(1), id(3)]);
+      expect(found.map((p) => p.slug)).toEqual(['a']);
+    });
+
+    it('returns nothing for an empty list without querying', async () => {
+      expect(await createMongoProductRepository(db).findByIds('taz4tech', [])).toEqual([]);
+    });
+
+    it('never crosses tenants', async () => {
+      // The guarantee the bulk editor leans on: an id from another store is
+      // simply absent, so the caller reports it as missing rather than editing
+      // somebody else's product.
+      const repository = createMongoProductRepository(db);
+      await repository.save(product({ storeId: 'tenant-a', id: id(1), slug: 'shared' }));
+      expect(await repository.findByIds('tenant-b', [id(1)])).toEqual([]);
+    });
+
+    it('uses an index rather than scanning', async () => {
+      const repository = createMongoProductRepository(db);
+      await repository.save(productWithSku(1, 'a'));
+
+      const stages = await explainOf({ storeId: 'taz4tech', _id: { $in: [id(1)] } });
+      expect(scansCollection(stages), stages.join(', ')).toBe(false);
+      expect(usesIndex(stages), stages.join(', ')).toBe(true);
+    });
+  });
+
   describe('findBySkus', () => {
     it('finds the product that owns each SKU, in one query', async () => {
       const repository = createMongoProductRepository(db);

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { IMPORT_PATH, requireAdminEnabled } from './session';
+import { PRODUCTS_PATH, requireAdminEnabled } from './session';
 
 /**
  * Dynamic, because whether the admin area exists at all is a RUNTIME question.
@@ -9,11 +9,12 @@ import { IMPORT_PATH, requireAdminEnabled } from './session';
 export const dynamic = 'force-dynamic';
 
 /**
- * There is one admin screen so far, so /admin is a signpost rather than a
- * dashboard. When there are several this becomes the index; until then a
- * landing page listing one link is a page nobody would read.
+ * A signpost rather than a dashboard. The product list is where the work starts
+ * — importing is something you do occasionally, editing is continuous — so that
+ * is where a bare /admin lands. A landing page offering two links is a page
+ * nobody would read twice.
  */
 export default function AdminIndex() {
   requireAdminEnabled();
-  redirect(IMPORT_PATH);
+  redirect(PRODUCTS_PATH);
 }

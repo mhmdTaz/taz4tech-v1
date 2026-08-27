@@ -160,6 +160,17 @@ non-blocking step keeps the dev findings visible rather than suppressed.
 
 ## Things worth knowing
 
+**Indexes are created at boot, in the composition root** — not by a seed script
+someone remembers to run. They were script-only until a fresh database showed
+what that costs: `$text` search throws `text index required for $text query`, a
+500 on the search box; and, silently, the *unique* indexes on `(storeId, slug)`
+and `(storeId, variants.sku)` do not exist, so two products can hold one SKU.
+Every create-versus-update decision the importer makes rests on those constraints
+actually being enforced. `createIndex` is idempotent, so this is a few no-op
+round trips once per process; if it fails, the container fails, the health check
+fails, and the deploy is rejected while the previous version is still serving.
+
+
 **Next 16.** `next` is pinned exact at `16.3.3` — the release that patches an AVIF
 decoder RCE. AVIF is disabled as part of that patch, so `images.formats` lists
 WebP only, and Lighthouse's `modern-image-formats` audit is turned off because it
@@ -324,6 +335,44 @@ client-supplied and an attacker with many addresses defeats the first limit. The
 global limit means a determined attacker can lock the operator out for fifteen
 minutes — a denial of service accepted deliberately, in exchange for the password
 not being guessable.
+
+## The bulk editor
+
+```
+/admin/products
+```
+
+Select products, choose one change, look at exactly what it would do, apply it.
+Same two-mode shape as the importer, and for the same reason: the preview is
+produced by the code a commit runs, not by a second implementation's guess at it.
+
+**The selection is a list of ids, never "everything matching this filter."**
+Apply-to-all is one mistyped filter away from repricing the catalogue, and what
+the operator would have approved is a *count* rather than a list. Wholesale
+change is what the importer is for; this is for the forty products someone is
+looking at. The cap is 100.
+
+**Four operations**: set status, set brand, change price by a percentage, and
+clear offers.
+
+**A percentage arrives as basis points**, not as a float. `1999 * 1.05` is
+`2098.9500000000003` before rounding — the multiplier itself is not
+representable. An integer multiplier keeps the multiplication exact and leaves
+exactly one rounding step, half away from zero, where it can be seen.
+
+**A price rise does not move the was-price.** A `compareAtPrice` is a claim about
+what the product used to cost, on the field Lebanese consumer protection rules
+care about; scaling it in step would keep the advertised discount looking
+identical while rewriting history. Leaving it means the discount shrinks
+honestly — and where the new price would meet or pass it, the product is refused
+by name rather than published advertising a discount of zero. `clear offers` is
+the operation that resolves those, and the one that rescues a product whose offer
+has already expired.
+
+**Three outcomes, not two**: changed, unchanged, refused. Setting status to
+active on a product that is already active is not a change — counting it would
+inflate the number the operator approves, and writing it would move `updatedAt`,
+which the storefront sorts and caches on.
 
 ## The Excel importer
 

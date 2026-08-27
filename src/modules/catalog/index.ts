@@ -8,6 +8,7 @@
 
 import type { EntityId } from '@platform/ids';
 import type { Db } from '@platform/mongo';
+import { type BulkEdit, makeBulkEdit } from './application/bulk-edit';
 import {
   type GetCollection,
   type GetCollectionProducts,
@@ -32,6 +33,17 @@ import {
 } from './infrastructure/mongo-product-repository';
 import { createXlsxWorkbookReader } from './infrastructure/xlsx-workbook-reader';
 
+export type {
+  BulkChange,
+  BulkChangeView,
+  BulkEdit,
+  BulkEditError,
+  BulkEditInput,
+  BulkEditOutput,
+  BulkEditReport,
+  BulkProductView,
+} from './application/bulk-edit';
+export { MAX_BULK_SELECTION, toBulkEditReport } from './application/bulk-edit';
 export type {
   GetCollection,
   GetCollectionError,
@@ -110,6 +122,13 @@ export type {
   SearchProductsQuery,
   SearchResult,
 } from './contracts';
+export type { BulkOperation, BulkOutcome, BulkRefusal } from './domain/bulk-edit';
+export {
+  applyBulkOperation,
+  isValidBasisPoints,
+  MAX_BASIS_POINTS,
+  MIN_BASIS_POINTS,
+} from './domain/bulk-edit';
 export type {
   Collection,
   CollectionError,
@@ -162,6 +181,7 @@ export type CatalogModule = {
   readonly listCollections: ListCollections;
   readonly getCollectionProducts: GetCollectionProducts;
   readonly saveCollection: SaveCollection;
+  readonly bulkEdit: BulkEdit;
   readonly ensureIndexes: () => Promise<void>;
 };
 
@@ -189,6 +209,7 @@ export const createCatalogModule = (deps: {
       products: repository,
       storeId: deps.storeId,
     }),
+    bulkEdit: makeBulkEdit({ ...wiring, now: deps.now }),
     importProducts: makeImportProducts({
       ...wiring,
       reader: createXlsxWorkbookReader(),

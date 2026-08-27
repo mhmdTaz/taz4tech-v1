@@ -53,6 +53,32 @@ export const buildContainer = async (): Promise<Container> => {
     nextId: () => ids.next(),
   });
 
+  /*
+   * Indexes are created HERE, at boot, not by a seed script somebody remembers
+   * to run.
+   *
+   * They were script-only until a fresh database proved what that costs. Without
+   * them:
+   *
+   *   - `$text` search throws "text index required for $text query" — a 500 on
+   *     the search box, on a catalogue that has products in it.
+   *   - the UNIQUE indexes on (storeId, slug) and (storeId, variants.sku) do not
+   *     exist, so two products can hold the same SKU. Every create-vs-update
+   *     decision the importer makes, and every conflict the bulk editor reports,
+   *     is built on those constraints actually being enforced.
+   *
+   * The second is the one that matters: it is silent. The site looks fine and
+   * the catalogue quietly stops meaning what the code assumes.
+   *
+   * createIndex is idempotent, so this is a few no-op round trips once per
+   * process — getContainer memoises the promise. If it fails, the container
+   * fails, the health check fails and the deploy is rejected while the previous
+   * version is still serving. That is the correct outcome: an app running
+   * without its unique indexes is corrupting data rather than being degraded.
+   */
+  await Promise.all([store.ensureIndexes(), catalog.ensureIndexes()]);
+  logger.debug('indexes ensured');
+
   return { config, db, clock, ids, logger, flags, store, catalog };
 };
 

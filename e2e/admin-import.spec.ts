@@ -37,6 +37,11 @@ const signIn = async (page: Page) => {
   await page.goto('/admin/login');
   await page.getByLabel('Password').fill(ADMIN_PASSWORD);
   await page.getByRole('button', { name: 'Sign in' }).click();
+
+  // Signing in lands on the product list — the screen the operator is in most
+  // of the time — so these specs navigate on to the importer themselves.
+  await expect(page.getByRole('heading', { level: 1, name: 'Products' })).toBeVisible();
+  await page.goto('/admin/import');
   await expect(page.getByRole('heading', { level: 1, name: 'Import catalogue' })).toBeVisible();
 };
 
@@ -82,9 +87,11 @@ test.describe('the admin gate', () => {
     await expect(page).toHaveURL(/\/admin\/login$/);
   });
 
-  test('lets the right password through', async ({ page }) => {
-    await signIn(page);
-    await expect(page).toHaveURL(/\/admin\/import$/);
+  test('lets the right password through, landing on the product list', async ({ page }) => {
+    await page.goto('/admin/login');
+    await page.getByLabel('Password').fill(ADMIN_PASSWORD);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await expect(page).toHaveURL(/\/admin\/products$/);
   });
 
   test('signing out closes the door again', async ({ page }) => {

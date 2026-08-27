@@ -10,6 +10,7 @@ const repository = () => {
     findBySku: vi.fn(),
     findBySlugs: vi.fn().mockResolvedValue([]),
     findBySkus: vi.fn().mockResolvedValue([]),
+    findByIds: vi.fn().mockResolvedValue([]),
     search: vi.fn(),
     save: vi.fn(),
     list: vi.fn(async (query: ListProductsQuery) => {
@@ -106,6 +107,7 @@ describe('listProducts', () => {
       findBySku: vi.fn(),
       findBySlugs: vi.fn().mockResolvedValue([]),
       findBySkus: vi.fn().mockResolvedValue([]),
+      findByIds: vi.fn().mockResolvedValue([]),
       search: vi.fn(),
       save: vi.fn(),
       list: vi.fn().mockResolvedValue({ products: [], nextCursor: 'next-page' }),
@@ -122,6 +124,7 @@ describe('listProducts', () => {
       findBySku: vi.fn(),
       findBySlugs: vi.fn().mockResolvedValue([]),
       findBySkus: vi.fn().mockResolvedValue([]),
+      findByIds: vi.fn().mockResolvedValue([]),
       search: vi.fn(),
       save: vi.fn(),
       list: vi.fn().mockRejectedValue(new Error('connection refused')),

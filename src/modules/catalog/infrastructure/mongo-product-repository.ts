@@ -432,6 +432,13 @@ export const createMongoProductRepository = (db: Db): ProductRepository => {
       return doc === null ? null : toDomain(doc, `${storeId}/sku:${sku}`);
     },
 
+    async findByIds(storeId, ids) {
+      if (ids.length === 0) return [];
+      // _id is the primary key, so this is an IXSCAN by construction.
+      const docs = await collection.find({ storeId, _id: { $in: [...ids] } }).toArray();
+      return docs.map((doc) => toDomain(doc, `${storeId}/${doc.slug}`));
+    },
+
     async findBySkus(storeId, skus) {
       if (skus.length === 0) return [];
       // Served by storeId_sku_unique; the integration test asserts on the plan.
