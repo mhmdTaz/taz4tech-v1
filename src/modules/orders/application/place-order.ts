@@ -222,6 +222,7 @@ const buildOrder = async (context: {
     number: formatOrderNumber(now.getUTCFullYear(), sequence),
     status: 'pending',
     customer: { name: input.name, phone },
+    locale: input.locale,
     delivery: {
       region,
       city: input.city,

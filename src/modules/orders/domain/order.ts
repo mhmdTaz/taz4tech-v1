@@ -20,6 +20,7 @@
  * shape and validated on the way in.
  */
 
+import type { Locale } from '@platform/locale';
 import type { Money } from '@platform/money';
 import { compare, fromCents, isNegative } from '@platform/money';
 import { isE164 } from '@platform/phone';
@@ -96,6 +97,14 @@ export type Order = {
   readonly number: string;
   readonly status: OrderStatus;
   readonly customer: Customer;
+  /**
+   * The language the customer shopped in.
+   *
+   * Recorded because the operator writes back to them — the WhatsApp message
+   * confirming an order should be in the language they placed it in, and there
+   * is nowhere else to learn that once the request is over.
+   */
+  readonly locale: Locale;
   readonly delivery: DeliveryAddress;
   readonly lines: readonly OrderLine[];
   readonly subtotal: Money;

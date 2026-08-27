@@ -42,6 +42,23 @@ export interface OrderRepository {
   list(query: ListOrdersQuery): Promise<OrderPage>;
   save(order: Order): Promise<Result<void, OrderConflict>>;
   /**
+   * Move an order from one status to another, atomically.
+   *
+   * The `from` is part of the WRITE, not a check before it. Two operators with
+   * the same order open both read "pending"; only one can match a filter that
+   * demands it. That matters most for cancellation, which gives stock back —
+   * two cancellations that both proceeded would credit the shelf twice.
+   *
+   * Returns null when nothing matched, which means somebody already moved it.
+   */
+  updateStatus(
+    storeId: string,
+    id: OrderId,
+    from: OrderStatus,
+    to: OrderStatus,
+    now: Date,
+  ): Promise<Order | null>;
+  /**
    * The next order number for a year, allocated atomically.
    *
    * A counter document incremented in one operation — two customers checking

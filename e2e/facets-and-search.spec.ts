@@ -111,13 +111,25 @@ test.describe('facets', () => {
 
   test('clicking a selected facet again removes it', async ({ page }) => {
     await page.goto('/en/products?brand=Lenovo');
+    await expect(productTile(page, /Samsung Galaxy A55/)).toHaveCount(0);
+
     await page
       .getByRole('complementary', { name: /Filters/ })
       .getByRole('link', { name: /Lenovo/ })
       .click();
 
     await expect(page).not.toHaveURL(/brand=Lenovo/);
-    await expect(tiles(page)).toHaveCount(3);
+
+    /*
+     * The products the filter was hiding are back — named, rather than counted.
+     *
+     * A count of the whole catalogue asserts the SEED, not the behaviour, and
+     * every spec that publishes a product to buy it (stock, admin orders) makes
+     * that number briefly wrong. Naming the products that returned says the same
+     * thing about the filter and stays true whatever else the database holds.
+     */
+    await expect(productTile(page, /Samsung Galaxy A55/)).toHaveCount(1);
+    await expect(productTile(page, /Lenovo IdeaPad 3/)).toHaveCount(1);
   });
 
   test('filters by a variant option', async ({ page }) => {
@@ -128,13 +140,21 @@ test.describe('facets', () => {
 
   test('clears every filter at once', async ({ page }) => {
     await page.goto('/en/products?brand=Lenovo&q=laptop');
+    await expect(tiles(page)).toHaveCount(1);
+
     await page
       .getByRole('link', { name: /Clear all filters/ })
       .first()
       .click();
 
     await expect(page).toHaveURL(/\/en\/products$/);
-    await expect(tiles(page)).toHaveCount(3);
+
+    // Named rather than counted, for the reason above: every seeded product is
+    // back, and a product another spec happens to have published does not make
+    // "the filters were cleared" false.
+    await expect(productTile(page, /Lenovo IdeaPad 3/)).toHaveCount(1);
+    await expect(productTile(page, /Samsung Galaxy A55/)).toHaveCount(1);
+    await expect(productTile(page, /Anker/)).toHaveCount(1);
   });
 
   test('offers no clear-filters link when nothing is filtered', async ({ page }) => {

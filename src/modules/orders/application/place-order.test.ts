@@ -60,6 +60,7 @@ const repository = (overrides: Partial<OrderRepository> = {}): OrderRepository =
   findByIdempotencyKey: vi.fn(async () => null),
   list: vi.fn(async () => ({ orders: [], nextCursor: null })),
   save: vi.fn(async () => ok(undefined)),
+  updateStatus: vi.fn(async () => null),
   nextSequence: vi.fn(async () => 42),
   ...overrides,
 });

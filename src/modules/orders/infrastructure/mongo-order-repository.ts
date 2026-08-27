@@ -8,6 +8,7 @@
  * writing.
  */
 
+import { LOCALES } from '@platform/locale';
 import type { Money } from '@platform/money';
 import { fromCents } from '@platform/money';
 import { err, ok, type Result } from '@platform/result';
@@ -27,6 +28,9 @@ const DocumentSchema = z.object({
   number: z.string().min(1),
   status: z.enum(ORDER_STATUSES),
   customer: z.object({ name: z.string().min(1), phone: z.string().min(1) }),
+  // Defaulted, so an order written before this field existed still reads rather
+  // than making the whole orders list unopenable.
+  locale: z.enum(LOCALES).default('en'),
   delivery: z.object({
     region: z.enum(REGIONS),
     city: z.string().min(1),
@@ -81,6 +85,7 @@ const toDomain = (document: unknown): Order => {
     number: data.number,
     status: data.status,
     customer: data.customer,
+    locale: data.locale,
     delivery: data.delivery,
     lines: data.lines.map((line) => ({
       sku: line.sku,
@@ -105,6 +110,7 @@ const toDocument = (order: Order): OrderDocument => ({
   number: order.number,
   status: order.status,
   customer: { name: order.customer.name, phone: order.customer.phone },
+  locale: order.locale,
   delivery: {
     region: order.delivery.region,
     city: order.delivery.city,
@@ -202,6 +208,24 @@ export const createMongoOrderRepository = (db: Db): OrderRepository => {
         if (conflict === null) throw error;
         return err(conflict);
       }
+    },
+
+    async updateStatus(storeId, id, from, to, now) {
+      /*
+       * The current status is part of the FILTER.
+       *
+       * Two operators with the same order open both read "pending"; only one
+       * can match a filter that still demands it. Reading, deciding and then
+       * writing would let both through — and for a cancellation, which gives
+       * stock back, that means crediting the shelf twice.
+       */
+      const updated = await collection.findOneAndUpdate(
+        { _id: id, storeId, status: from },
+        { $set: { status: to, updatedAt: now } },
+        { returnDocument: 'after' },
+      );
+
+      return updated === null ? null : toDomain(updated);
     },
 
     async nextSequence(storeId, year) {

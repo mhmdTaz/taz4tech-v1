@@ -77,6 +77,16 @@ export default async function AdminProductsPage({ searchParams }: PageProps) {
         </div>
 
         <div className="flex items-center gap-3">
+          {/*
+            Login lands here, so this is the only route to the orders screen. An
+            admin page reachable solely by typing its URL is a page nobody uses.
+          */}
+          <a
+            href="/admin/orders"
+            className="rounded-lg border border-hairline px-3 py-2 text-sm text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            Orders
+          </a>
           <a
             href="/admin/import"
             className="rounded-lg border border-hairline px-3 py-2 text-sm text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"

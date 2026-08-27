@@ -137,5 +137,14 @@
     "baalbek_hermel": "بعلبك-الهرمل",
     "south": "الجنوب",
     "nabatieh": "النبطية"
+  },
+  "whatsapp": {
+    "greeting": "مرحباً {name}،",
+    "intro": "معك Taz4Tech بخصوص طلبك {number}.",
+    "items": "طلبك:",
+    "total": "الإجمالي",
+    "delivery": "التوصيل إلى",
+    "cod": "تدفع للسائق نقداً عند الاستلام.",
+    "closing": "شكراً لك!"
   }
 }
