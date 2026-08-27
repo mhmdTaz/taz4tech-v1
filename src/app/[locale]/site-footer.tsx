@@ -1,6 +1,7 @@
 import { showsRegistryNumber } from '@modules/store';
 import type { Locale } from '@platform/locale';
 import { formatForDisplay } from '@platform/phone';
+import { connection } from 'next/server';
 import { getTranslations } from 'next-intl/server';
 import { getContainer } from '@/composition';
 import { LanguageSwitcher } from './language-switcher';
@@ -18,6 +19,20 @@ import { LanguageSwitcher } from './language-switcher';
  * shop's phone number is one form and not a deploy.
  */
 export const SiteFooter = async ({ locale }: { locale: Locale }) => {
+  /*
+   * Opt out of prerendering, the same way the store summary does.
+   *
+   * Without this the BUILD tries to render this component, and a build machine
+   * has no business connecting to a production database to generate a page —
+   * which is exactly what happened: the local build passed because Mongo was
+   * running on the machine, and CI's build job, which deliberately has no
+   * database, died on ECONNREFUSED while exporting /ar.
+   *
+   * The store summary got this for free from the Suspense boundary around it.
+   * This footer has none, on purpose — see the layout — so it has to say so.
+   */
+  await connection();
+
   const t = await getTranslations({ locale, namespace: 'footer' });
   const tNav = await getTranslations({ locale, namespace: 'nav' });
   const tDelivery = await getTranslations({ locale, namespace: 'delivery' });

@@ -113,6 +113,7 @@ through `parseFloat`, which would turn `"1.115"` into 111 cents instead of 112.
 | `pnpm test:integration` | Against a real MongoDB (see below) |
 | `pnpm test:e2e` | Playwright, all locales, axe included |
 | `pnpm bundle:budget` | Fails if client JS crosses its ceiling |
+| `pnpm build:offline` | `pnpm build` with no database reachable, the way CI builds it |
 | `pnpm seed` | Creates the store settings document if there is none, and otherwise leaves it alone |
 | `pnpm seed --reset` | Overwrites it with the defaults. Local databases only unless `TAZ_SEED_TARGET` names the database |
 | `pnpm seed:demo` | Loads demo products. Local databases only, same override |
@@ -285,6 +286,18 @@ JavaScript off and reads the footer out of the HTML, and it failed. The cost of
 the fix is one indexed lookup by `storeId` before the response flushes, and no
 prerendered shell is given up for it — every route under this layout is already
 server-rendered on demand.
+
+Taking the boundary away had a second consequence that `pnpm build` on a
+developer's machine cannot see. The boundary was also what kept this component
+out of the BUILD's render pass; without it the build tried to prerender the
+footer, and a build machine has no business connecting to a database to generate
+a page. It passed locally because Mongo happens to be running here, and died in
+CI — which deliberately builds with no database — on `ECONNREFUSED` while
+exporting `/ar`. The fix is `await connection()`, the same opt-out the store
+summary gets for free from the boundary around it. **`pnpm build:offline`** is
+that failure kept as a command: the same build with nothing listening, so the
+next component that reads a database at build time is caught here rather than in
+a pipeline.
 
 **The delivery page prices itself.** The eight governorate fees are read from
 store settings, so the page a customer reads and the number checkout charges
