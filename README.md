@@ -114,8 +114,8 @@ through `parseFloat`, which would turn `"1.115"` into 111 cents instead of 112.
 | `pnpm test:e2e` | Playwright, all locales, axe included |
 | `pnpm bundle:budget` | Fails if client JS crosses its ceiling |
 | `pnpm seed` | Creates the store settings document if there is none, and otherwise leaves it alone |
-| `pnpm seed --reset` | Overwrites it with the defaults. Test databases only — it discards anything edited in the admin |
-| `pnpm seed:demo` | Loads demo products (fixtures, never for Atlas) |
+| `pnpm seed --reset` | Overwrites it with the defaults. Local databases only unless `TAZ_SEED_TARGET` names the database |
+| `pnpm seed:demo` | Loads demo products. Local databases only, same override |
 | `pnpm import:catalogue <file.xlsx>` | Dry-run a catalogue import; add `--commit` to apply |
 
 ### Running the integration tests
@@ -548,6 +548,52 @@ database being fresh.
 The decision lives in `ensureStoreSettings`, not in the script, so "does this
 already exist" is unit-tested rather than trusted. `saveStoreSettings` is the
 separate door that overwrites, and nothing reaches it by accident.
+
+### Two commands that must not reach production
+
+`pnpm seed:demo` writes three fake laptops and a cable, three of them **active**,
+so on a real catalogue that is four products a customer can buy. `pnpm seed
+--reset` replaces the settings document, discarding the shop's name, phone
+number, VAT rate and eight delivery prices.
+
+The mistake has a specific shape. These scripts do **not** read `.env.local`, so
+`MONGODB_URI` has to be in the environment — which is exactly what an operator
+does to run `pnpm seed` against Atlas the one time a real store is created. Every
+command in that shell then inherits it, and `pnpm seed:demo` is the next thing
+anyone types when the storefront looks empty. Nothing else would catch it: the
+write succeeds, reports success, and the fixtures are live.
+
+So both refuse any database that is not on this machine:
+
+```
+Refusing to write demo fixtures: "taz4tech" is not a local database.
+
+  host      cluster0.xxxxx.mongodb.net
+  database  taz4tech
+
+If that really is the database you meant, name it and run again:
+
+  TAZ_SEED_TARGET=taz4tech pnpm seed:demo
+```
+
+**The override names the database.** A plain `--force` gets typed from muscle
+memory and rides along in a command recalled from shell history; naming the
+database means the override only works for the one it was written for. Recall it
+against a different database and it refuses again, which is precisely when it
+should.
+
+`isLocalMongo` **parses** the connection string rather than searching it, and
+that distinction is the guard. `uri.includes('localhost')` says yes to
+`mongodb://user:localhost@cluster.mongodb.net` — a password — and waves
+production straight through. Being wrong here is silent in exactly the direction
+that costs something, so it sits in `src/platform/mongo/uri.ts` with tests, and
+the coverage exclusion for that folder was narrowed to the client lifecycle so it
+is actually gated. Anything it cannot read counts as remote: "I don't know" has
+to mean "assume it is production".
+
+Plain `pnpm seed` is **not** guarded. It is create-only, it is how a real store
+comes into existence, and it leaves an existing one alone — so pointing it at
+Atlas is the intended workflow rather than the accident.
 
 ## Store settings
 

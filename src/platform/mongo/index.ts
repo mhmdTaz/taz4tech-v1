@@ -21,6 +21,9 @@ import { type Db, MongoClient } from 'mongodb';
  */
 export type { ClientSession, Collection, Db, MongoClient } from 'mongodb';
 
+/** Reading a connection string without opening one. See uri.ts for why. */
+export { isLocalMongo, mongoHosts } from './uri';
+
 export type MongoOptions = {
   readonly uri: string;
   readonly database: string;

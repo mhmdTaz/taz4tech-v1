@@ -19,8 +19,10 @@
  * is charged to a real customer at their door.
  *
  * `--reset` exists for test databases, which have to be put back to a known
- * state. It names the database it overwrote, because that is the sentence
- * somebody needs to read when they typed it in the wrong terminal.
+ * state — and it refuses any database that is not on this machine unless the
+ * database is named in TAZ_SEED_TARGET. Discarding a shop's name, phone number,
+ * VAT rate and eight delivery prices is not something a mistyped command should
+ * be able to do quietly. See guard-remote.ts.
  *
  * Note it goes through the module barrel and the composition root, exactly like
  * the app does. A seeder that talks to the collection directly is a seeder that
@@ -30,7 +32,9 @@
 import { sameEverywhere } from '@platform/regions';
 import { getContainer } from '../src/composition/index.js';
 import type { StoreSettings } from '../src/modules/store/index.js';
+import { getConfig } from '../src/platform/config/index.js';
 import { closeMongo } from '../src/platform/mongo/index.js';
+import { remoteRefusal } from './guard-remote.js';
 
 const RESET_FLAG = '--reset';
 
@@ -41,17 +45,43 @@ const rejected = (error: unknown): void => {
 
 const main = async (): Promise<void> => {
   const reset = process.argv.slice(2).includes(RESET_FLAG);
-  const container = await getContainer();
-  const database = container.config.mongo.database;
 
+  /*
+   * Before the connection, not after.
+   *
+   * Refusing after `getContainer()` would still refuse the write, but it would
+   * connect to the production cluster and create indexes on it first — and when
+   * the host is unreachable it buries the guard's message under a DNS error.
+   */
+  const config = getConfig();
+  const database = config.mongo.database;
+
+  if (reset) {
+    const refusal = remoteRefusal({
+      uri: config.mongo.uri,
+      database,
+      action: 'replace the store settings',
+      command: `pnpm seed ${RESET_FLAG}`,
+    });
+
+    if (refusal !== null) {
+      console.error(refusal);
+      console.error('');
+      console.error('Without --reset this script leaves an existing store alone.');
+      process.exitCode = 1;
+      return;
+    }
+  }
+
+  const container = await getContainer();
   await container.store.ensureIndexes();
 
   const defaults: StoreSettings = {
-    storeId: container.config.storeId,
+    storeId: config.storeId,
     name: 'Taz4Tech',
     defaultLocale: 'en',
     locales: ['en', 'ar', 'fr'],
-    siteUrl: container.config.siteUrl,
+    siteUrl: config.siteUrl,
     contactPhone: '+96170000000',
     // Lebanon's VAT rate is 11%. Whether this store must charge it depends on
     // registration, which is not settled — see the note on the domain type.
