@@ -288,11 +288,11 @@ it. The constraint does the work, not a check that two requests could both pass.
 customers checking out in the same second cannot be handed one number — it is
 spoken on the phone and printed on a box.
 
-Delivery is a **flat fee** on store settings, zero by default. Cost genuinely
-varies by governorate in Lebanon, so a per-region table is the obvious next
-step; it is not here yet because there is no store-settings admin screen to edit
-one. The region is recorded on every order, so the data to price it properly is
-being collected from today.
+Delivery is a **flat fee** on store settings, zero by default, edited on the
+[settings screen](#store-settings). Cost genuinely varies by governorate in
+Lebanon, so a per-region table is the obvious next step — what is missing now is
+not a screen but the eight prices. The region is recorded on every order, so
+they can be set from real deliveries rather than guessed.
 
 ## The cart
 
@@ -462,8 +462,16 @@ catalogue size, and one pagination model is worth keeping.
 ## The admin area
 
 ```
-/admin/import
+/admin/orders      the day's work: call, confirm, deliver, cancel
+/admin/products    the catalogue, and the bulk editor
+/admin/import      a price list in, behind its own flag
+/admin/settings    the shop's own details, and what delivery costs
 ```
+
+One navigation, in `src/app/admin/nav.tsx`, shared by all four. It was extracted
+at the fourth screen because three copies of a header was already how the orders
+screen shipped reachable only by typing its URL — and it omits the importer link
+when that flag is off, since a link to a 404 is worse than no link.
 
 **It exists only when it is configured.** `ADMIN_PASSWORD` and
 `ADMIN_SESSION_SECRET` are set together or not at all: unset, every `/admin` URL
@@ -490,6 +498,50 @@ client-supplied and an attacker with many addresses defeats the first limit. The
 global limit means a determined attacker can lock the operator out for fifteen
 minutes — a denial of service accepted deliberately, in exchange for the password
 not being guessable.
+
+## Store settings
+
+The shop's own details, and what delivery costs.
+
+**Every box on this screen changes something a customer can see.** The name, the
+phone number and the registry number appear on the storefront; the VAT rate is
+what the shop quotes; the delivery fee is added to every order. Nothing else is
+offered as a field.
+
+That rule is the whole design of the screen. `StoreSettings` also holds the
+locales, the default locale and a site URL — and none of those are read at
+runtime from the database. Routing is built from a compiled-in list of locales,
+and every canonical link comes from `SITE_URL` on the deploy. **A box that
+accepts an edit and changes nothing is worse than no box**: the operator believes
+they changed something, and nobody finds out until a customer does. So those
+appear in a *Set by the deploy* panel, as values with a note saying where they
+come from, and the form carries them through untouched.
+
+**The parsing lives in a use case, not in the Server Action.** An action cannot
+be unit tested, and turning "11.5" into 1150 is exactly the kind of code that is
+wrong by a factor of ten in a way nobody notices. `updateStoreSettings` takes the
+raw strings a browser posts and is held at 100% by the coverage gate.
+
+**A percentage and an amount are the same parser.** Basis points are percent ×
+100 exactly as cents are dollars × 100, so "11.25" becomes 1125 either way, and
+reusing the money parser buys the thing it was written for: the fractional digits
+are read as characters rather than through a float, so `11.15` does not arrive as
+`11.149999999999999` and truncate to 1114. It also inherits the refusal to guess
+at a comma — `11,5` is rejected as ambiguous rather than silently read as eleven
+and a half or a hundred and fifteen.
+
+**The shop's own phone goes through the same door as a customer's.** `03 123 456`
+and `+961 3 123 456` are one number, stored one way, so the storefront never
+shows two spellings of it.
+
+A refused save **comes back with everything still typed**. A settings form that
+empties itself because one field was wrong is a form nobody fills in twice. The
+error names the box rather than the failure, so the page can outline the field
+that is wrong instead of printing a paragraph asking the operator to find it.
+
+Changing the delivery fee does not change orders already placed — they are
+snapshots — and the screen says so next to the field, because that is the first
+thing an operator worries about.
 
 ## The admin order screen
 
@@ -657,6 +709,17 @@ conflict still throws: a dropped connection must never be reported as
   so a crawler that does not execute JavaScript still sees every tile. Removing
   the boundary would block the page shell on a database query; keeping it leaves
   the one place the storefront does not keep its no-JS promise.
+- **Three fields on `StoreSettings` are never read.** `siteUrl`, `locales` and
+  `defaultLocale` are written by the seeder and mirrored by nothing: canonical
+  links come from `SITE_URL`, and routing is built from the compiled-in locale
+  list. The settings screen shows the real values and refuses to offer boxes for
+  them, but the stored copies are still there, still able to drift, and still
+  looking authoritative to whoever reads the document next. Either wire them up
+  or drop them.
+- **Delivery is one flat fee for the whole country.** Beirut is not Akkar, the
+  region is on every order, and the screen to edit a per-governorate table now
+  exists. What is missing is eight real prices — worth setting from deliveries
+  that have happened rather than from a guess made today.
 - **An order is found only by browsing.** The orders list filters by status and
   pages by cursor, but there is no search. A customer phones, says "I ordered
   yesterday", and the operator pages until they see the name. Searching by phone
