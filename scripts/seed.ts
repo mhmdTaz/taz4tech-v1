@@ -32,6 +32,9 @@ const main = async (): Promise<void> => {
     // Law 81/2018 Art. 31. Null until the business is registered; the storefront
     // hides the line rather than printing an empty label.
     commercialRegistryNumber: null,
+    // Flat and free to start. The region is recorded on every order, so a
+    // per-governorate table can be priced from real deliveries later.
+    deliveryFeeCents: 0,
   });
 
   if (!result.ok) {

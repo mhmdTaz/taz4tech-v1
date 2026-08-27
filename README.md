@@ -241,6 +241,59 @@ store settings are real configuration, three fake laptops are not. The fixtures
 cover the awkward shapes on purpose — an incomplete variant matrix, a live offer,
 a product with no imagery, and a draft that must stay hidden.
 
+## Checkout and orders
+
+Name, phone, address, cash on delivery. No accounts — **the phone number is the
+customer identity**, so it is normalised to one shape on the way in and every
+Lebanese way of typing it lands on the same record.
+
+**An order is a SNAPSHOT, not a set of references.** Every line carries the
+title, the options and the price as they were when the customer agreed to them,
+and nothing is looked up again. Change a price tomorrow and yesterday's order
+still says what was agreed; archive a product and last month's order is still
+readable. For a cash business that is the difference between a receipt and a
+guess, at the door, with the customer holding the money. The totals are
+**checked** rather than trusted: a line total that does not equal price ×
+quantity is refused, because that is the one error nobody notices until the cash
+is counted.
+
+**The order of operations is the design:**
+
+```
+validate the customer   cheap, and rejects most bad input
+re-price the cart       live, from the catalogue, never from the browser
+TAKE THE STOCK          atomically, one line at a time
+allocate a number       only once the goods are secured
+write the order         snapshotting everything above
+```
+
+Stock is taken before the number so a failed checkout does not burn one, and
+before the write so an order never exists for goods the shop does not have. If
+any later step fails, **everything taken is given back**.
+
+That compensation stands in for a transaction. Atlas would give us one, and it
+would be tidier — but the databases the tests run against are standalone
+servers where transactions are unavailable, and a correctness mechanism that
+cannot be exercised in tests is one nobody should trust. The residual risk is a
+process dying between taking and giving back, which understates stock until
+someone recounts a shelf: visible and recoverable for a shop whose operator
+handles the goods.
+
+**A double-tapped submit produces one order.** The form carries a key generated
+when it was rendered, a unique index refuses the second write, and the customer
+is shown the order they already placed rather than an error about having placed
+it. The constraint does the work, not a check that two requests could both pass.
+
+**The order number comes from an atomic counter**, per store and per year. Two
+customers checking out in the same second cannot be handed one number — it is
+spoken on the phone and printed on a box.
+
+Delivery is a **flat fee** on store settings, zero by default. Cost genuinely
+varies by governorate in Lebanon, so a per-region table is the obvious next
+step; it is not here yet because there is no store-settings admin screen to edit
+one. The region is recorded on every order, so the data to price it properly is
+being collected from today.
+
 ## The cart
 
 **It is a cookie, not a document.** A cart is a list of SKUs and quantities — a

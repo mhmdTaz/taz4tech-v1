@@ -28,6 +28,12 @@ const StoreSettingsDocument = z.object({
   contactPhone: z.string().min(1),
   vatBasisPoints: z.number().int(),
   commercialRegistryNumber: z.string().nullable(),
+  /*
+   * Defaulted rather than required, so a settings document written before this
+   * field existed still reads. The alternative is a store that stops booting
+   * because a field it never had is missing — a migration disguised as a schema.
+   */
+  deliveryFeeCents: z.number().int().min(0).default(0),
 });
 
 type StoreSettingsDocumentShape = z.infer<typeof StoreSettingsDocument>;

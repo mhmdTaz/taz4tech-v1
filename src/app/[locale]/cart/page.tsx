@@ -219,14 +219,16 @@ const Summary = async ({ priced, locale }: { priced: PricedCart; locale: Locale 
       */}
       <p className="text-sm text-faint">{t('vatNote')}</p>
 
-      <button
-        type="button"
-        disabled
-        className="rounded-lg bg-accent px-4 py-3 text-sm font-medium text-void opacity-50"
+      {/*
+        A link, not a button: checkout is a page, and getting there should work
+        with a middle click, a long press and no JavaScript at all.
+      */}
+      <a
+        href={`/${locale}/checkout`}
+        className="rounded-lg bg-accent px-4 py-3 text-center text-sm font-medium text-void transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         {t('checkout')}
-      </button>
-      <p className="text-sm text-muted">{t('checkoutSoon')}</p>
+      </a>
     </section>
   );
 };
