@@ -37,10 +37,10 @@ export type StoreSettings = {
    *
    * FLAT, deliberately, and 0 by default. Delivery cost in Lebanon genuinely
    * varies by governorate — Beirut is not Akkar — so a per-region table is the
-   * obvious next step. It is not here yet because there is no store-settings
-   * admin screen to edit one, and a table nobody can change is worse than a
-   * number everybody understands. The region IS recorded on every order, so the
-   * data to price one properly is being collected from today.
+   * obvious next step, and the settings screen that would edit one now exists.
+   * What is missing is the prices: the region IS recorded on every order, so the
+   * data to set eight of them from real deliveries is being collected, and
+   * guessing them first would be worse than one number everybody understands.
    */
   readonly deliveryFeeCents: number;
 };

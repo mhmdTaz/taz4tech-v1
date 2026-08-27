@@ -1,7 +1,7 @@
 import { IMPORT_FIELDS, REQUIRED_FIELDS } from '@modules/catalog';
 import { notFound } from 'next/navigation';
 import { getContainer } from '@/composition';
-import { logOut } from '../login/actions';
+import { AdminNav } from '../nav';
 import { requireAdmin } from '../session';
 import { Importer } from './importer';
 
@@ -26,20 +26,7 @@ export default async function ImportPage() {
           </p>
         </div>
 
-        <a
-          href="/admin/products"
-          className="rounded-lg border border-hairline px-3 py-2 text-sm text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          Products
-        </a>
-        <form action={logOut}>
-          <button
-            type="submit"
-            className="rounded-lg border border-hairline px-3 py-2 text-sm text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            Sign out
-          </button>
-        </form>
+        <AdminNav current="/admin/import" importer />
       </header>
 
       {/*

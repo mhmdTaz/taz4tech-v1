@@ -2,7 +2,7 @@ import { ORDER_STATUSES, type OrderStatus } from '@modules/orders';
 import { format as formatMoney } from '@platform/money';
 import { formatForDisplay } from '@platform/phone';
 import { getContainer } from '@/composition';
-import { logOut } from '../login/actions';
+import { AdminNav } from '../nav';
 import { requireAdmin } from '../session';
 import { StatusChip } from './status-chip';
 
@@ -60,22 +60,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
           <p className="text-sm text-muted">Newest first. Call the customer, then confirm.</p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <a
-            href="/admin/products"
-            className="rounded-lg border border-hairline px-3 py-2 text-sm text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            Products
-          </a>
-          <form action={logOut}>
-            <button
-              type="submit"
-              className="rounded-lg border border-hairline px-3 py-2 text-sm text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
+        <AdminNav current="/admin/orders" importer={container.flags.isOn('excelImporter')} />
       </header>
 
       {/*

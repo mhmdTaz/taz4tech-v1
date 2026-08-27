@@ -1,7 +1,7 @@
 import { PRODUCT_STATUSES, type ProductStatus } from '@modules/catalog';
 import { notFound } from 'next/navigation';
 import { getContainer } from '@/composition';
-import { logOut } from '../login/actions';
+import { AdminNav } from '../nav';
 import { requireAdmin } from '../session';
 import { BulkEditor, type ProductRow } from './bulk-editor';
 
@@ -76,32 +76,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps) {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/*
-            Login lands here, so this is the only route to the orders screen. An
-            admin page reachable solely by typing its URL is a page nobody uses.
-          */}
-          <a
-            href="/admin/orders"
-            className="rounded-lg border border-hairline px-3 py-2 text-sm text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            Orders
-          </a>
-          <a
-            href="/admin/import"
-            className="rounded-lg border border-hairline px-3 py-2 text-sm text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            Import
-          </a>
-          <form action={logOut}>
-            <button
-              type="submit"
-              className="rounded-lg border border-hairline px-3 py-2 text-sm text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
+        <AdminNav current="/admin/products" importer />
       </header>
 
       {/*
