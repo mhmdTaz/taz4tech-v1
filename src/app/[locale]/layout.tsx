@@ -1,4 +1,5 @@
-import { directionOf, isLocale } from '@platform/locale';
+import { getConfig } from '@platform/config';
+import { directionOf, isLocale, LOCALES } from '@platform/locale';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { hasLocale, NextIntlClientProvider } from 'next-intl';
@@ -13,10 +14,37 @@ import '../globals.css';
  */
 export const generateStaticParams = () => routing.locales.map((locale) => ({ locale }));
 
-export const metadata: Metadata = {
-  title: 'Taz4Tech',
-  description: 'Electronics, delivered across Lebanon. Cash on delivery.',
-};
+/**
+ * metadataBase is what turns every relative `alternates` entry into an absolute
+ * URL. Without it Next emits `<link rel="canonical" href="/en/products">`, and
+ * Google treats a relative canonical or hreflang as INVALID — it silently
+ * ignores both. Lighthouse scored SEO 0.83 on exactly that before this was set,
+ * while the pages themselves looked perfectly correct.
+ *
+ * Read from config rather than the store settings document so that rendering
+ * metadata never costs a database round trip.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const { siteUrl } = getConfig();
+
+  return {
+    metadataBase: new URL(siteUrl),
+    title: 'Taz4Tech',
+    description: 'Electronics, delivered across Lebanon. Cash on delivery.',
+    alternates: {
+      canonical: `/${locale}`,
+      languages: {
+        ...Object.fromEntries(LOCALES.map((l) => [l, `/${l}`])),
+        'x-default': '/en',
+      },
+    },
+  };
+}
 
 export default async function LocaleLayout({
   children,
