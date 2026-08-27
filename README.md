@@ -113,6 +113,7 @@ through `parseFloat`, which would turn `"1.115"` into 111 cents instead of 112.
 | `pnpm test:integration` | Against a real MongoDB (see below) |
 | `pnpm test:e2e` | Playwright, all locales, axe included |
 | `pnpm bundle:budget` | Fails if client JS crosses its ceiling |
+| `pnpm build:offline` | `pnpm build` with no database reachable, the way CI builds it |
 | `pnpm seed` | Creates the store settings document if there is none, and otherwise leaves it alone |
 | `pnpm seed --reset` | Overwrites it with the defaults. Local databases only unless `TAZ_SEED_TARGET` names the database |
 | `pnpm seed:demo` | Loads demo products. Local databases only, same override |
@@ -251,6 +252,87 @@ Demo fixtures live in `pnpm seed:demo`, deliberately separate from `pnpm seed`:
 store settings are real configuration, three fake laptops are not. The fixtures
 cover the awkward shapes on purpose — an incomplete variant matrix, a live offer,
 a product with no imagery, and a draft that must stay hidden.
+
+## The footer, and the pages a shop needs
+
+```
+/delivery   what it costs, per governorate, read live from settings
+/returns    at the door, and after
+/terms      prices, ordering, payment, cancelling
+/privacy    what is kept, why, and what is not
+/contact    the number, and the same number on WhatsApp
+```
+
+**The footer is where the shop says who it is.** Law 81/2018 Art. 31 wants the
+seller identified on the storefront, and until this existed the only place that
+happened was a configuration panel on the home page — a panel that exists to be
+deleted. The name, the commercial registry number and a number a customer can
+actually ring now sit on every page, read from the settings the admin edits, so
+changing the shop's phone number is one form and not a deploy. The registry line
+appears only once there is a number to show, because an empty label is clutter
+rather than compliance.
+
+**The footer is deliberately not behind a Suspense boundary, and the header is.**
+That looks inconsistent until you look at what each waits on. The header reads a
+cookie, which is instant, so its boundary resolves before the response flushes.
+The footer waits on a database round trip — so React flushes the fallback and
+streams the real content in afterwards with an inline script, and **a browser
+with JavaScript disabled never sees it at all**. That is merely annoying for a
+product grid. For the one place the shop states its legal identity, a disclosure
+that needs JavaScript is not a disclosure.
+
+This was found rather than reasoned about: the e2e spec loads a page with
+JavaScript off and reads the footer out of the HTML, and it failed. The cost of
+the fix is one indexed lookup by `storeId` before the response flushes, and no
+prerendered shell is given up for it — every route under this layout is already
+server-rendered on demand.
+
+Taking the boundary away had a second consequence that `pnpm build` on a
+developer's machine cannot see. The boundary was also what kept this component
+out of the BUILD's render pass; without it the build tried to prerender the
+footer, and a build machine has no business connecting to a database to generate
+a page. It passed locally because Mongo happens to be running here, and died in
+CI — which deliberately builds with no database — on `ECONNREFUSED` while
+exporting `/ar`. The fix is `await connection()`, the same opt-out the store
+summary gets for free from the boundary around it. **`pnpm build:offline`** is
+that failure kept as a command: the same build with nothing listening, so the
+next component that reads a database at build time is caught here rather than in
+a pipeline.
+
+**The delivery page prices itself.** The eight governorate fees are read from
+store settings, so the page a customer reads and the number checkout charges
+cannot drift apart. A hand-written table would have been a second answer to a
+question the settings screen already answers, and the one customers read would
+be the one nobody remembers to update.
+
+### The written copy
+
+The pages describe **how this shop actually works**, not how shops generally
+work, and most of it is checkable against the code: an order is a request until
+the operator confirms it by phone (that is the `pending → confirmed` transition);
+the price at checkout is the price the order is written with (orders are
+snapshots); one cookie holds the basket and nothing else is stored (there is no
+analytics in this codebase, so there is nothing to consent to).
+
+Three things in it are **business promises rather than facts about the system** —
+the seven-day return window, what cannot be taken back, and inspecting the box
+with the driver before paying. They are drafted, not authoritative. The
+statutory part — what a Lebanese distance seller owes a consumer regardless of
+what these pages say — is not written here and needs the same treatment the VAT
+question already gets: a professional, not a guess.
+
+### A language switcher, finally
+
+Three links, one per language, pointing at the page you are already on. The
+storefront has been trilingual since Phase 0 with no way to change language
+except editing the URL.
+
+It is the storefront's only client component, and only because staying on the
+same page needs the current path, which a Server Component in a layout cannot
+read. It costs nothing at runtime: `usePathname` resolves during the server
+render, so the real hrefs are in the HTML and the switcher works with JavaScript
+disabled — which the e2e spec checks, because that claim is exactly the kind
+that is easy to make and easy to be wrong about.
 
 ## Checkout and orders
 
@@ -824,7 +906,10 @@ conflict still throws: a dropped connection must never be reported as
   a JS-disabled browser sits on the skeleton. The markup is all in the response,
   so a crawler that does not execute JavaScript still sees every tile. Removing
   the boundary would block the page shell on a database query; keeping it leaves
-  the one place the storefront does not keep its no-JS promise.
+  the one place the storefront does not keep its no-JS promise. The footer hit
+  the same wall and was decided the other way — a legal disclosure that needs
+  JavaScript is not a disclosure — which is the argument for looking at the
+  listing again rather than for leaving it.
 - **Three fields on `StoreSettings` are never read.** `siteUrl`, `locales` and
   `defaultLocale` are written by the seeder and mirrored by nothing: canonical
   links come from `SITE_URL`, and routing is built from the compiled-in locale
@@ -836,6 +921,14 @@ conflict still throws: a dropped connection must never be reported as
   edits it; nobody has priced a governorate yet. Worth setting from deliveries
   that have actually happened rather than from a guess — until then the shop
   delivers free, which is at least a number it can honour.
+- **One e2e test flaked once, and the evidence is gone.** `quick-view.spec.ts`'s
+  "starts from the current selection" failed in one full run out of four while
+  the footer was being added, and passed 27/27 in isolation and on every run
+  since. The artefacts from that run were deleted before it could be read, which
+  was careless. The test now asserts its starting state as well as its result, so
+  a repeat says whether the dialog opened on the wrong variant or the click lost
+  the colour — two different bugs that looked identical from the old assertion.
+  Watch for it; do not assume it is gone.
 - **An order is found only by browsing.** The orders list filters by status and
   pages by cursor, but there is no search. A customer phones, says "I ordered
   yesterday", and the operator pages until they see the name. Searching by phone
