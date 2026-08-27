@@ -26,6 +26,7 @@ const order = (n: number, overrides: Partial<Order> = {}): Order => ({
   number: `T4T-26-${String(n).padStart(6, '0')}`,
   status: 'pending',
   customer: { name: 'Rana K', phone: '+9613123456' },
+  locale: 'en',
   delivery: { region: 'beirut', city: 'Beirut', street: 'Hamra St', notes: null },
   lines: [
     {
@@ -285,5 +286,64 @@ describe('listing', () => {
       .explain();
 
     expect(scansCollection(winningStages(explain))).toBe(false);
+  });
+});
+
+describe('updateStatus', () => {
+  it('moves an order and stamps updatedAt', async () => {
+    const repository = createMongoOrderRepository(db);
+    await repository.save(order(1));
+
+    const later = new Date('2026-08-28T09:00:00Z');
+    const moved = await repository.updateStatus(
+      'taz4tech',
+      order(1).id,
+      'pending',
+      'confirmed',
+      later,
+    );
+
+    expect(moved?.status).toBe('confirmed');
+    expect(moved?.updatedAt).toEqual(later);
+  });
+
+  it('returns null when the order is not in the status the caller expected', async () => {
+    // Somebody moved it in between. The caller re-reads and tells the operator
+    // what it is now, rather than overwriting a decision they never saw.
+    const repository = createMongoOrderRepository(db);
+    await repository.save(order(1, { status: 'confirmed' }));
+
+    expect(
+      await repository.updateStatus('taz4tech', order(1).id, 'pending', 'cancelled', NOW),
+    ).toBeNull();
+  });
+
+  it('lets exactly ONE of two simultaneous cancellations through', async () => {
+    /*
+     * The reason the status is part of the filter rather than a check before it.
+     *
+     * Cancelling gives stock back. Two operators with the same order open both
+     * read "pending"; if both writes went through, the shelf would be credited
+     * twice for one order.
+     */
+    const repository = createMongoOrderRepository(db);
+    await repository.save(order(1));
+
+    const both = await Promise.all([
+      repository.updateStatus('taz4tech', order(1).id, 'pending', 'cancelled', NOW),
+      repository.updateStatus('taz4tech', order(1).id, 'pending', 'cancelled', NOW),
+    ]);
+
+    expect(both.filter((result) => result !== null)).toHaveLength(1);
+  });
+
+  it('never crosses tenants', async () => {
+    const repository = createMongoOrderRepository(db);
+    await repository.save(order(1, { storeId: 'tenant-a' }));
+
+    expect(
+      await repository.updateStatus('tenant-b', order(1).id, 'pending', 'cancelled', NOW),
+    ).toBeNull();
+    expect((await repository.findByNumber('tenant-a', 'T4T-26-000001'))?.status).toBe('pending');
   });
 });

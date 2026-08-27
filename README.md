@@ -491,6 +491,60 @@ global limit means a determined attacker can lock the operator out for fifteen
 minutes — a denial of service accepted deliberately, in exchange for the password
 not being guessable.
 
+## The admin order screen
+
+The list, then one order: call the customer, confirm, mark it delivered — or
+cancel it, which puts the stock back.
+
+```
+pending ──▶ confirmed ──▶ delivered
+   │            │
+   └────────────┴────────▶ cancelled
+```
+
+Delivered and cancelled are terminal, and **cancelled is deliberately not
+reachable from cancelled**: cancelling returns stock, and a second cancellation
+would credit the shelf for a unit nobody sold.
+
+**The status the operator was looking at is part of the write.** Every button
+carries the status the screen was rendered from, and the update is a
+`findOneAndUpdate` filtered on it. Two operators looking at the same pending
+order both press Cancel; the filter matches once, so the shelf is credited once.
+Nothing here is a read, a decision and then a write that another request could
+slip between.
+
+That hidden status is also what makes the *message* right. A screen left open
+while somebody else confirmed the order says **"somebody moved this order first
+— it is confirmed now"**, not "that transition is not allowed". Both are true.
+Only one of them tells the operator what to do next, and only one of them
+declines to blame them for pressing a button that was legal when it was drawn.
+
+**The flip happens before the stock is returned.** A crash in between understates
+stock, which a shelf count reveals. The opposite order would let two cancellations
+both credit the shelf, which nothing reveals until a customer is promised
+something that is not there.
+
+The list filters by status through **links, not a form** — "today's pending
+orders" is a URL worth bookmarking — and pages by cursor. Times are Beirut,
+always. Money is `tabular-nums`, so a column of totals lines up. Status is a
+colour **and** the word, because colour alone fails a colour-blind reader and
+disappears in a printed picking slip.
+
+### WhatsApp, tap to send
+
+Behind the `whatsappTapToSend` flag: a `wa.me` link that opens WhatsApp with the
+message already written. **A person presses send.** Nothing is delivered
+automatically, no business API is involved, and the message comes from the
+operator's own number, which the customer can reply to.
+
+It is written **in the language the customer shopped in** — the order records its
+locale at checkout, and this is the only place that fact is ever used. The admin
+screens around it are English; the message that leaves the shop is not.
+
+Long orders list twelve lines and then say `• +N`. Silently truncating would send
+a customer a confirmation missing items they ordered, which is worse than a
+message that admits there are more.
+
 ## The bulk editor
 
 ```
@@ -603,6 +657,18 @@ conflict still throws: a dropped connection must never be reported as
   so a crawler that does not execute JavaScript still sees every tile. Removing
   the boundary would block the page shell on a database query; keeping it leaves
   the one place the storefront does not keep its no-JS promise.
+- **An order is found only by browsing.** The orders list filters by status and
+  pages by cursor, but there is no search. A customer phones, says "I ordered
+  yesterday", and the operator pages until they see the name. Searching by phone
+  number is the obvious answer — the phone number is already the customer
+  identity — and it is not here because nobody has yet run a list long enough to
+  need it.
+- **The order confirmation URL is guessable.** `/checkout/T4T-26-000042` is
+  sequential, and it shows a name, a phone number and an address. There are no
+  accounts, so the URL is the only handle a customer has on their order; a signed
+  token in the link would fix it and would also break every confirmation already
+  pasted into a WhatsApp thread. Worth deciding before the shop is busy enough for
+  the numbers to be worth walking.
 - **An expired offer blocks every edit to a product.** `createProduct` refuses a
   product whose `offerEndsAt` is in the past, so an old product cannot be
   archived until its offer is cleared. `clear offers` in the bulk editor exists

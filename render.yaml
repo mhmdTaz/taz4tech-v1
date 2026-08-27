@@ -63,6 +63,12 @@ services:
       - key: TAZ_FLAG_EXCEL_IMPORTER
         value: "on"
 
+      # The WhatsApp button on an order. Off until the operator has a number on
+      # WhatsApp Business and has read a draft message — it goes out under their
+      # name, from their phone, so switching it on is their call and not a deploy.
+      - key: TAZ_FLAG_WHATSAPP_TAP_TO_SEND
+        value: "off"
+
     # Every PR gets a disposable copy of the app. This is the eleventh required
     # check in the quality gate — the one a human actually looks at.
     previews:

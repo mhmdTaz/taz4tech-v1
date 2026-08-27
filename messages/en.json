@@ -137,5 +137,14 @@
     "baalbek_hermel": "Baalbek-Hermel",
     "south": "South",
     "nabatieh": "Nabatieh"
+  },
+  "whatsapp": {
+    "greeting": "Hello {name},",
+    "intro": "This is Taz4Tech about your order {number}.",
+    "items": "Your order:",
+    "total": "Total",
+    "delivery": "Delivering to",
+    "cod": "You pay the driver in cash on delivery.",
+    "closing": "Thank you!"
   }
 }

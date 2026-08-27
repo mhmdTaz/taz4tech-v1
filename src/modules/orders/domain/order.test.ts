@@ -46,6 +46,7 @@ const order = (overrides: Partial<Order> = {}): Order => {
     number: 'T4T-26-000001',
     status: 'pending',
     customer: { name: 'Rana K', phone: '+9613123456' },
+    locale: 'en',
     delivery: { region: 'beirut', city: 'Beirut', street: 'Hamra St, Bldg 4', notes: null },
     lines,
     subtotal,

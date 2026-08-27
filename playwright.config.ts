@@ -67,6 +67,8 @@ export default defineConfig({
       ADMIN_PASSWORD: ADMIN_PASSWORD,
       ADMIN_SESSION_SECRET: 'e2e-session-secret-that-is-long-enough-0123456789',
       TAZ_FLAG_EXCEL_IMPORTER: 'on',
+      // A flag that is never switched on in a test is a feature nothing proves.
+      TAZ_FLAG_WHATSAPP_TAP_TO_SEND: 'on',
     },
   },
 });

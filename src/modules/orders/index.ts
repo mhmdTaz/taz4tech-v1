@@ -11,6 +11,12 @@ import type { EntityId } from '@platform/ids';
 import type { Db } from '@platform/mongo';
 import { makePlaceOrder, type PlaceOrder, type PlaceOrderDeps } from './application/place-order';
 import {
+  type ListOrders,
+  makeListOrders,
+  makeUpdateOrderStatus,
+  type UpdateOrderStatus,
+} from './application/update-order-status';
+import {
   createMongoOrderRepository,
   ensureOrderIndexes,
 } from './infrastructure/mongo-order-repository';
@@ -21,7 +27,27 @@ export type {
   PlaceOrderError,
   PlaceOrderInput,
 } from './application/place-order';
-export type { ListOrdersQuery, OrderConflict, OrderPage, OrderRepository } from './contracts';
+export type {
+  ListOrders,
+  UpdateOrderStatus,
+  UpdateOrderStatusError,
+} from './application/update-order-status';
+export { DEFAULT_ORDER_PAGE, MAX_ORDER_PAGE } from './application/update-order-status';
+export type { WhatsAppLabels, WhatsAppOptions } from './application/whatsapp-message';
+export {
+  displayPhone,
+  MAX_LISTED_LINES,
+  whatsAppLink,
+  whatsAppMessage,
+} from './application/whatsapp-message';
+export type {
+  ListOrdersQuery,
+  OrderConflict,
+  OrderPage,
+  OrderRepository,
+  StockLedger,
+  StockTakeFailure,
+} from './contracts';
 export type {
   Customer,
   DeliveryAddress,
@@ -44,6 +70,9 @@ export {
 
 export type OrdersModule = {
   readonly placeOrder: PlaceOrder;
+  readonly listOrders: ListOrders;
+  readonly updateStatus: UpdateOrderStatus;
+  readonly findById: (id: string) => Promise<import('./domain/order').Order | null>;
   readonly findByNumber: (number: string) => Promise<import('./domain/order').Order | null>;
   /**
    * What delivery will cost on this order.
@@ -63,6 +92,14 @@ export const createOrdersModule = (
 
   return {
     placeOrder: makePlaceOrder({ ...deps, repository }),
+    listOrders: makeListOrders({ repository, storeId: deps.storeId }),
+    updateStatus: makeUpdateOrderStatus({
+      repository,
+      stock: deps.stock,
+      storeId: deps.storeId,
+      now: deps.now,
+    }),
+    findById: (id) => repository.findById(deps.storeId, id),
     findByNumber: (number) => repository.findByNumber(deps.storeId, number),
     deliveryFeeCents: deps.deliveryFeeCents,
     ensureIndexes: () => ensureOrderIndexes(deps.db),
