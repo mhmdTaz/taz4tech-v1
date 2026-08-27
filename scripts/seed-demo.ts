@@ -8,6 +8,12 @@
  * script would mean one careless run against Atlas publishes three fake laptops
  * to customers.
  *
+ * Being separate was never enough on its own, though: the shell that just ran
+ * `pnpm seed` against Atlas still has MONGODB_URI in it, and this is the next
+ * command anyone types when the storefront looks empty. It now REFUSES any
+ * database that is not on this machine unless the database is named in
+ * TAZ_SEED_TARGET. See guard-remote.ts.
+ *
  * Deliberately covers the awkward shapes rather than three tidy products:
  * a two-axis matrix with a GAP in it, a live offer, a product with no imagery,
  * and a partially translated title.
@@ -15,13 +21,36 @@
 
 import { getContainer } from '../src/composition/index.js';
 import type { Collection, Product } from '../src/modules/catalog/index.js';
+import { getConfig } from '../src/platform/config/index.js';
 import { fromCents } from '../src/platform/money/index.js';
 import { closeMongo } from '../src/platform/mongo/index.js';
 import { unwrapOrThrow } from '../src/platform/result/index.js';
+import { remoteRefusal } from './guard-remote.js';
 
 const usd = (cents: number) => unwrapOrThrow(fromCents(cents));
 
 const main = async (): Promise<void> => {
+  /*
+   * Before the connection, not after. There is nothing to undo yet, and the
+   * message names the host rather than reporting a write that already happened.
+   */
+  const config = getConfig();
+  const refusal = remoteRefusal({
+    uri: config.mongo.uri,
+    database: config.mongo.database,
+    action: 'write demo fixtures',
+    command: 'pnpm seed:demo',
+  });
+
+  if (refusal !== null) {
+    console.error(refusal);
+    console.error('');
+    console.error('These are fixtures: fake products, three of them ACTIVE and visible');
+    console.error('to customers the moment they are written.');
+    process.exitCode = 1;
+    return;
+  }
+
   const container = await getContainer();
   await container.catalog.ensureIndexes();
 

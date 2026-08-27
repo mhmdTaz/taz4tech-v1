@@ -53,7 +53,11 @@ export default defineConfig({
         'src/modules/*/index.ts',
         'src/app/**',
         'src/composition/**',
-        'src/platform/mongo/**',
+        // The CLIENT LIFECYCLE only — opening a pooled connection cannot be unit
+        // tested. `uri.ts` next to it is pure parsing that decides whether a
+        // script is about to write fixtures into a real shop, so it stays inside
+        // the gate: the same mistake this list already warns about once.
+        'src/platform/mongo/index.ts',
         // Adapters are exercised by the integration project against a real
         // MongoDB, which cannot run in this pass. Gating them on unit-run line
         // coverage would fail permanently and prove nothing; what actually
