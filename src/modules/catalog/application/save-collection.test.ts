@@ -38,6 +38,7 @@ const wiring = (options: { existing?: Collection | null; productExists?: boolean
       .mockResolvedValue(options.productExists === false ? null : ({ id: pid(1) } as Product)),
     findBySku: vi.fn(),
     findBySlugs: vi.fn(),
+    findBySkus: vi.fn(async () => []),
     list: vi.fn(),
     save: vi.fn(),
     search: vi.fn(),

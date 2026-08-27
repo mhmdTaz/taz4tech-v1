@@ -190,6 +190,129 @@ describe('MongoProductRepository', () => {
     expect(await repository.findById('other', id(7))).toBeNull();
   });
 
+  describe('findBySkus', () => {
+    it('finds the product that owns each SKU, in one query', async () => {
+      const repository = createMongoProductRepository(db);
+      await repository.save(productWithSku(1, 'a'));
+      await repository.save(productWithSku(2, 'b'));
+
+      const found = await repository.findBySkus('taz4tech', ['SKU-1', 'SKU-9']);
+      expect(found.map((p) => p.slug)).toEqual(['a']);
+    });
+
+    it('finds a product by a SKU on any of its variants, not just the first', async () => {
+      // The importer asks about every SKU in the sheet; a product whose SECOND
+      // variant owns the SKU is exactly as much of a conflict as the first.
+      const repository = createMongoProductRepository(db);
+      await repository.save(
+        product({
+          id: id(7),
+          slug: 'two-variants',
+          optionNames: ['Length'],
+          variants: [
+            {
+              sku: 'MULTI-A',
+              options: [{ name: 'Length', value: '1m' }],
+              price: usd(1000),
+              compareAtPrice: null,
+              offerEndsAt: null,
+              barcode: null,
+              weightGrams: null,
+            },
+            {
+              sku: 'MULTI-B',
+              options: [{ name: 'Length', value: '2m' }],
+              price: usd(2000),
+              compareAtPrice: null,
+              offerEndsAt: null,
+              barcode: null,
+              weightGrams: null,
+            },
+          ],
+        }),
+      );
+
+      const found = await repository.findBySkus('taz4tech', ['MULTI-B']);
+      expect(found.map((p) => p.slug)).toEqual(['two-variants']);
+    });
+
+    it('returns nothing for an empty list without querying', async () => {
+      expect(await createMongoProductRepository(db).findBySkus('taz4tech', [])).toEqual([]);
+    });
+
+    it('never crosses tenants', async () => {
+      const repository = createMongoProductRepository(db);
+      await repository.save(product({ storeId: 'tenant-a', id: id(1), slug: 'shared' }));
+      expect(await repository.findBySkus('tenant-b', ['SKU-1'])).toEqual([]);
+    });
+
+    it('uses an index rather than scanning', async () => {
+      const repository = createMongoProductRepository(db);
+      await repository.save(productWithSku(1, 'a'));
+
+      const stages = await explainOf({ storeId: 'taz4tech', 'variants.sku': { $in: ['SKU-1'] } });
+      expect(scansCollection(stages), stages.join(', ')).toBe(false);
+      expect(usesIndex(stages), stages.join(', ')).toBe(true);
+    });
+  });
+
+  describe('save, when a unique index refuses the write', () => {
+    it('reports a SKU already owned by another product instead of throwing', async () => {
+      /*
+       * The crash this replaces: the importer used to let E11000 escape, so a
+       * renamed product with an unchanged SKU produced a 500 halfway through the
+       * write, with everything before it already saved.
+       */
+      const repository = createMongoProductRepository(db);
+      await repository.save(productWithSku(1, 'original'));
+
+      const thief = product({
+        id: id(2),
+        slug: 'renamed',
+        variants: [
+          {
+            sku: 'SKU-1',
+            options: [],
+            price: usd(5000),
+            compareAtPrice: null,
+            offerEndsAt: null,
+            barcode: null,
+            weightGrams: null,
+          },
+        ],
+      });
+
+      expect(await repository.save(thief)).toEqual({
+        ok: false,
+        error: { tag: 'sku_taken', sku: 'SKU-1' },
+      });
+    });
+
+    it('reports a slug already taken by another product', async () => {
+      const repository = createMongoProductRepository(db);
+      await repository.save(productWithSku(1, 'taken'));
+
+      expect(await repository.save(productWithSku(2, 'taken'))).toEqual({
+        ok: false,
+        error: { tag: 'slug_taken', slug: 'taken' },
+      });
+    });
+
+    it('is an ordinary success when the same product keeps its own SKU', async () => {
+      // The common case — a re-imported price list — must not be mistaken for a
+      // conflict just because the SKU already exists.
+      const repository = createMongoProductRepository(db);
+      const original = productWithSku(1, 'a');
+      expect(await repository.save(original)).toEqual({ ok: true, value: undefined });
+      expect(await repository.save({ ...original, brand: 'Updated' })).toEqual({
+        ok: true,
+        value: undefined,
+      });
+
+      expect((await repository.findBySlug('taz4tech', 'a'))?.brand).toBe('Updated');
+    });
+  });
+
   describe('findBySlugs', () => {
     it('returns every match in one query', async () => {
       const repository = createMongoProductRepository(db);
@@ -231,18 +354,29 @@ describe('MongoProductRepository', () => {
   });
 
   describe('uniqueness', () => {
+    /*
+     * The constraint is unchanged; how it is REPORTED changed. save() used to
+     * let Mongo's E11000 escape, which made a duplicate SKU a 500 halfway
+     * through an import. It now returns an Err naming the field that collided,
+     * so a caller can say which row of the spreadsheet is at fault and carry on
+     * with the rest.
+     */
     it('rejects two products sharing a slug within one store', async () => {
       const repository = createMongoProductRepository(db);
       await repository.save(product({ id: id(1) }));
-      await expect(repository.save(product({ id: id(2) }))).rejects.toThrow(/duplicate key/i);
+      expect(await repository.save(product({ id: id(2) }))).toEqual({
+        ok: false,
+        error: { tag: 'slug_taken', slug: 'lenovo-ideapad-3' },
+      });
     });
 
     it('allows the same slug in a different store', async () => {
       const repository = createMongoProductRepository(db);
       await repository.save(product({ storeId: 'tenant-a', id: id(1) }));
-      await expect(
-        repository.save(product({ storeId: 'tenant-b', id: id(2) })),
-      ).resolves.toBeUndefined();
+      expect(await repository.save(product({ storeId: 'tenant-b', id: id(2) }))).toEqual({
+        ok: true,
+        value: undefined,
+      });
     });
 
     it('rejects a SKU reused across two products in one store', async () => {
@@ -250,9 +384,21 @@ describe('MongoProductRepository', () => {
       // would make stock and the importer's insert-vs-update decision ambiguous.
       const repository = createMongoProductRepository(db);
       await repository.save(product({ id: id(1), slug: 'first' }));
-      await expect(repository.save(product({ id: id(2), slug: 'second' }))).rejects.toThrow(
-        /duplicate key/i,
-      );
+      expect(await repository.save(product({ id: id(2), slug: 'second' }))).toEqual({
+        ok: false,
+        error: { tag: 'sku_taken', sku: 'SKU-1' },
+      });
+    });
+
+    it('still writes exactly one document after a refused write', async () => {
+      // A conflict that is REPORTED rather than thrown must not also have
+      // written something. Returning ok:false while leaving a partial row behind
+      // would be worse than the exception it replaced.
+      const repository = createMongoProductRepository(db);
+      await repository.save(product({ id: id(1) }));
+      await repository.save(product({ id: id(2) }));
+
+      expect(await db.collection(PRODUCTS_COLLECTION).countDocuments({})).toBe(1);
     });
   });
 

@@ -33,6 +33,7 @@ const plan = (rows: string[][], existing: Product[] = [], headers: string[] = HE
     storeId: 'taz4tech',
     now: NOW,
     existingBySlug: new Map(existing.map((product) => [product.slug, product])),
+    ownerSlugBySku: new Map(),
     nextId,
   });
 };

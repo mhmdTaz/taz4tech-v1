@@ -42,9 +42,10 @@ const repositoryWith = (existing: Product | null = null) => {
     findById: vi.fn(),
     findBySku: vi.fn(),
     findBySlugs: vi.fn().mockResolvedValue([]),
+    findBySkus: vi.fn().mockResolvedValue([]),
     search: vi.fn(),
     list: vi.fn(),
-    save: vi.fn().mockResolvedValue(undefined),
+    save: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
   };
   return repo;
 };
@@ -143,10 +144,43 @@ describe('saveProduct', () => {
       findById: vi.fn(),
       findBySku: vi.fn(),
       findBySlugs: vi.fn().mockResolvedValue([]),
+      findBySkus: vi.fn().mockResolvedValue([]),
       search: vi.fn(),
       list: vi.fn(),
       save: vi.fn().mockRejectedValue(new Error('write concern timeout')),
     };
     await expect(save(repo)(product())).rejects.toThrow('write concern timeout');
+  });
+});
+
+describe('when the database refuses the write', () => {
+  /*
+   * save() reports a uniqueness conflict rather than throwing. That answer must
+   * be propagated — ignoring it would turn a refused write into a reported
+   * success, and the caller would go on to tell someone the product was saved.
+   */
+  const repositoryRefusing = (
+    error: { tag: 'sku_taken'; sku: string } | { tag: 'slug_taken'; slug: string },
+  ): ProductRepository => ({
+    findBySlug: vi.fn().mockResolvedValue(null),
+    findById: vi.fn(),
+    findBySku: vi.fn(),
+    findBySlugs: vi.fn().mockResolvedValue([]),
+    findBySkus: vi.fn().mockResolvedValue([]),
+    search: vi.fn(),
+    list: vi.fn(),
+    save: vi.fn().mockResolvedValue({ ok: false, error }),
+  });
+
+  it('reports a SKU already owned by another product', async () => {
+    const result = await save(repositoryRefusing({ tag: 'sku_taken', sku: 'SKU-1' }))(product());
+    expect(result).toEqual({ ok: false, error: { tag: 'sku_taken', sku: 'SKU-1' } });
+  });
+
+  it('reports a slug taken between the check and the write', async () => {
+    // findBySlug says the slug is free; by the time the write lands it is not.
+    // The pre-check is an optimisation for a good message, never the guarantee.
+    const result = await save(repositoryRefusing({ tag: 'slug_taken', slug: 'taken' }))(product());
+    expect(result).toEqual({ ok: false, error: { tag: 'slug_taken', slug: 'taken' } });
   });
 });

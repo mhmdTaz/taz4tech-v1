@@ -14,7 +14,8 @@ import { createProduct, type Product, type ProductError } from '../domain/produc
 export type SaveProductError =
   | { readonly tag: 'invalid'; readonly reason: ProductError }
   | { readonly tag: 'wrong_tenant'; readonly expected: string; readonly received: string }
-  | { readonly tag: 'slug_taken'; readonly slug: string };
+  | { readonly tag: 'slug_taken'; readonly slug: string }
+  | { readonly tag: 'sku_taken'; readonly sku: string };
 
 export type SaveProduct = (input: Product) => Promise<Result<Product, SaveProductError>>;
 
@@ -39,6 +40,18 @@ export const makeSaveProduct =
       return err({ tag: 'slug_taken', slug: product.value.slug });
     }
 
-    await deps.repository.save(product.value);
+    /*
+     * The repository's answer is not discarded.
+     *
+     * save() reports a uniqueness conflict rather than throwing, so ignoring it
+     * would turn a refused write into a reported success — the worst possible
+     * shape for this function, because the caller would go on to tell someone
+     * the product was saved. The slug check above catches the common case
+     * early; this catches the SKU, and catches a slug taken in the moment
+     * between that read and this write.
+     */
+    const saved = await deps.repository.save(product.value);
+    if (!saved.ok) return err(saved.error);
+
     return ok(product.value);
   };

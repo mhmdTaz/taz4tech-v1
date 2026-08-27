@@ -11,7 +11,7 @@
 
 import type { EntityId } from '@platform/ids';
 import { err, ok, type Result } from '@platform/result';
-import type { ProductRepository, WorkbookReader } from '../contracts';
+import type { ProductRepository, SaveConflict, WorkbookReader } from '../contracts';
 import type { Product } from '../domain/product';
 import { type ColumnMapping, detectMapping } from './import/column-mapping';
 import { type ImportPlan, planImport } from './import/plan-import';
@@ -30,11 +30,29 @@ export type ImportProductsInput = {
 
 export type ImportProductsOutput = {
   readonly headers: readonly string[];
+  /**
+   * Every row as read, header included.
+   *
+   * Returned by reference — the reader already holds them, so this costs nothing
+   * — and it is what lets the admin screen show a few real cells beside each
+   * column while the operator maps it. Nothing here is sent to a browser
+   * directly: toImportReport caps how many rows are exposed, in one tested place.
+   */
+  readonly rows: readonly (readonly string[])[];
   /** The mapping actually used, so the UI can show and edit it. */
   readonly mapping: ColumnMapping;
   readonly plan: ImportPlan;
   /** Products written. Always 0 for a dry run. */
   readonly written: number;
+  /**
+   * Products the database refused at write time.
+   *
+   * Should always be empty — the plan detects SKU conflicts before committing.
+   * It is not guaranteed empty, because between the plan and the write someone
+   * else can take a SKU, and a partial import that says so is very different
+   * from one that reports success and quietly wrote less.
+   */
+  readonly failures: readonly { readonly slug: string; readonly conflict: SaveConflict }[];
   readonly committed: boolean;
 };
 
@@ -82,6 +100,7 @@ export const makeImportProducts =
       storeId: deps.storeId,
       now: deps.now(),
       existingBySlug: new Map(),
+      ownerSlugBySku: new Map(),
       nextId: deps.nextId,
     });
 
@@ -92,11 +111,38 @@ export const makeImportProducts =
       ]),
     ];
 
-    const existing =
-      slugs.length === 0 ? [] : await deps.repository.findBySlugs(deps.storeId, slugs);
+    const skus = [
+      ...new Set(
+        provisional.products.flatMap((planned) =>
+          planned.product.variants.map((variant) => variant.sku),
+        ),
+      ),
+    ];
+
+    /*
+     * Two bulk lookups, in parallel, for the whole sheet.
+     *
+     * By slug: does this product exist, so is this a create or an update?
+     * By SKU:  does this SKU already belong to something ELSE?
+     *
+     * The second is what stops a rename from becoming an E11000 halfway through
+     * the write. Rename "Anker Cable" to "Anker Cable 2m", keep the SKU, and the
+     * slug lookup finds nothing — so the plan says create, and the unique index
+     * on the SKU refuses it after some other products have already been saved.
+     */
+    const [existing, skuOwners] = await Promise.all([
+      slugs.length === 0 ? [] : deps.repository.findBySlugs(deps.storeId, slugs),
+      skus.length === 0 ? [] : deps.repository.findBySkus(deps.storeId, skus),
+    ]);
+
     const existingBySlug = new Map<string, Product>(
       existing.map((product) => [product.slug, product]),
     );
+
+    const ownerSlugBySku = new Map<string, string>();
+    for (const owner of skuOwners) {
+      for (const variant of owner.variants) ownerSlugBySku.set(variant.sku, owner.slug);
+    }
 
     const plan = planImport({
       rows,
@@ -104,11 +150,12 @@ export const makeImportProducts =
       storeId: deps.storeId,
       now: deps.now(),
       existingBySlug,
+      ownerSlugBySku,
       nextId: deps.nextId,
     });
 
     if (input.commit !== true) {
-      return ok({ headers, mapping, plan, written: 0, committed: false });
+      return ok({ headers, rows, mapping, plan, written: 0, failures: [], committed: false });
     }
 
     /*
@@ -118,10 +165,24 @@ export const makeImportProducts =
      * one cell that blocked everything.
      */
     let written = 0;
+    const failures: { slug: string; conflict: SaveConflict }[] = [];
+
     for (const planned of plan.products) {
-      await deps.repository.save(planned.product);
-      written++;
+      const saved = await deps.repository.save(planned.product);
+      if (saved.ok) {
+        written++;
+        continue;
+      }
+      /*
+       * A uniqueness conflict here means the catalogue changed between the plan
+       * and this write. Recording it and carrying on is deliberate: stopping
+       * would leave the operator with a 500, a partly-written catalogue and no
+       * statement of which half landed. Anything that is NOT a conflict still
+       * throws out of the repository, because a dropped connection must not be
+       * reported as "397 of 400 imported".
+       */
+      failures.push({ slug: planned.product.slug, conflict: saved.error });
     }
 
-    return ok({ headers, mapping, plan, written, committed: true });
+    return ok({ headers, rows, mapping, plan, written, failures, committed: true });
   };

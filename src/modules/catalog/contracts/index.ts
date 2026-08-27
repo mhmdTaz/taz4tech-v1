@@ -3,6 +3,7 @@
  * layer depends only on them.
  */
 
+import type { Result } from '@platform/result';
 import type { Collection, CollectionId, CollectionStatus } from '../domain/collection';
 import type { Product, ProductId, ProductStatus } from '../domain/product';
 
@@ -115,6 +116,16 @@ export interface ProductRepository {
    * one that times out.
    */
   findBySlugs(storeId: string, slugs: readonly string[]): Promise<Product[]>;
+  /**
+   * Bulk SKU lookup, so an import can see a SKU already owned by ANOTHER product
+   * before it tries to write one.
+   *
+   * A SKU is unique across the store, but a sheet identifies a product by slug.
+   * Rename a product and re-list its SKU and the two disagree — the planner
+   * calls it a create, and the unique index rejects the write. Without this
+   * lookup that only surfaces as a failed write, halfway through the import.
+   */
+  findBySkus(storeId: string, skus: readonly string[]): Promise<Product[]>;
   list(query: ListProductsQuery): Promise<ProductPage>;
   /**
    * A page of results plus the facet counts for the same query.
@@ -125,5 +136,18 @@ export interface ProductRepository {
    * without clearing the filter first.
    */
   search(query: SearchProductsQuery): Promise<SearchResult>;
-  save(product: Product): Promise<void>;
+  /**
+   * Write a product.
+   *
+   * Returns a Result rather than throwing on a uniqueness conflict, because a
+   * conflict is an EXPECTED outcome of importing a spreadsheet someone else may
+   * also be editing — not a bug. Anything else (a dropped connection, a bad
+   * write concern) still throws.
+   */
+  save(product: Product): Promise<Result<void, SaveConflict>>;
 }
+
+/** A unique index refused the write. Which one is what the caller has to report. */
+export type SaveConflict =
+  | { readonly tag: 'sku_taken'; readonly sku: string }
+  | { readonly tag: 'slug_taken'; readonly slug: string };

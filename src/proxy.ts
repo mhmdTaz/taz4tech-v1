@@ -11,6 +11,19 @@ import { routing } from './i18n/routing';
 export default createMiddleware(routing);
 
 export const config = {
-  // Everything except Next internals, the API surface, and files with an extension.
-  matcher: ['/((?!api|_next|_vercel|.*..*).*)'],
+  /*
+   * Everything except Next internals, the API surface, the admin area, and files
+   * with an extension.
+   *
+   * The `\\.` is load-bearing and was previously a bare `.`, which quietly broke
+   * this: an unescaped dot matches ANY character, so `.*.*.*` excluded every
+   * path of two characters or more and the middleware ran on `/` alone. The
+   * homepage redirected correctly, so nothing looked wrong, while `/products`
+   * 404ed instead of redirecting to `/en/products`.
+   *
+   * `admin` is excluded because it is deliberately outside the locale tree —
+   * without it, locale negotiation would rewrite `/admin` to `/en/admin`, which
+   * does not exist.
+   */
+  matcher: ['/((?!api|admin|_next|_vercel|.*\\..*).*)'],
 };
