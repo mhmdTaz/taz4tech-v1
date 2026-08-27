@@ -49,7 +49,10 @@
     "quickViewOf": "Aperçu rapide : {title}",
     "close": "Fermer",
     "fullDetails": "Voir la fiche complète",
-    "quickViewHint": "Un résumé. La fiche complète contient les caractéristiques et toutes les photos."
+    "quickViewHint": "Un résumé. La fiche complète contient les caractéristiques et toutes les photos.",
+    "inStock": "En stock",
+    "outOfStock": "Rupture de stock",
+    "unitsLeft": "Plus que {count}"
   },
   "collections": {
     "title": "Collections",

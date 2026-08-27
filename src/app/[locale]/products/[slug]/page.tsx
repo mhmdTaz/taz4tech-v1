@@ -80,10 +80,19 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
   // The use case still distinguishes them, which is what the admin preview needs.
   if (product === null) notFound();
 
+  /*
+   * Stock is a separate module and a separate document, so it is a separate
+   * read — one query for this product's SKUs, joined here in the delivery layer
+   * rather than by making the catalogue know what stock is.
+   */
+  const { inventory } = await getContainer();
+  const stock = await inventory.getStockLevels(product.variants.map((each) => each.sku));
+
   return (
     <ProductDetail
       product={product}
       locale={locale as Locale}
+      stock={stock}
       {...(variant === undefined ? {} : { selectedSku: variant })}
     />
   );

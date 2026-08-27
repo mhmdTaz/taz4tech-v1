@@ -114,13 +114,15 @@ const run = async (formData: FormData, commit: boolean): Promise<ImportResponse>
     return { ok: false, message: 'That file could not be read as an .xlsx workbook.' };
   }
 
-  const { headers, rows, plan, written, failures, committed } = result.value;
+  const { headers, rows, plan, written, failures, stockFailures, stockWritten, committed } =
+    result.value;
 
   if (committed) {
     container.logger.info('catalogue imported from the admin screen', {
       written,
       products: plan.summary.products,
       rowsRejected: plan.summary.rowsRejected,
+      stockWritten,
       skuConflicts: plan.skuConflicts.length,
       // Non-zero means a write raced with another one. Worth a line in the log
       // even though the operator is also told on screen.
@@ -138,6 +140,8 @@ const run = async (formData: FormData, commit: boolean): Promise<ImportResponse>
       committed,
       written,
       failures,
+      stockFailures,
+      stockWritten,
     }),
   };
 };

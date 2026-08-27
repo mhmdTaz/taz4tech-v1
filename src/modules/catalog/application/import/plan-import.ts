@@ -74,6 +74,14 @@ export type PlannedProduct = {
   readonly action: 'create' | 'update';
   /** Excel row numbers this product came from, for the preview table. */
   readonly rows: readonly number[];
+  /**
+   * Stock the sheet stated, per SKU. Empty when it said nothing.
+   *
+   * A blank cell is NOT zero. "I did not count this" and "there are none" are
+   * different claims, and importing the first as the second would take a
+   * catalogue off sale on the strength of an empty column.
+   */
+  readonly stock: readonly { readonly sku: string; readonly onHand: number }[];
 };
 
 export type ImportPlan = {
@@ -139,6 +147,8 @@ type ParsedRow = {
   readonly weightGrams: number | null;
   readonly options: readonly VariantOption[];
   readonly image: Media | null;
+  /** null when the sheet has no stock column, or the cell is blank for this row. */
+  readonly stock: number | null;
 };
 
 /** Read one data row. Returns every problem it finds, not only the first. */
@@ -166,6 +176,7 @@ const parseRow = (
   const offerEndsAt = record('offerEndsAt', cell.optionalDate(at('offerEndsAt')));
   const productStatus = record('status', cell.status(at('status')));
   const weightGrams = record('weightGrams', cell.optionalInteger(at('weightGrams')));
+  const stock = record('stock', cell.optionalInteger(at('stock')));
 
   if (titleEn === null || sku === null || price === null || productStatus === null) {
     return { row: null, problems };
@@ -207,6 +218,7 @@ const parseRow = (
       offerEndsAt,
       barcode: cell.optionalText(at('barcode')),
       weightGrams,
+      stock,
       options,
       image:
         imageUrl === null
@@ -350,6 +362,14 @@ const assembleGroups = (
       product: assembled.product,
       action: assembled.action,
       rows: rowNumbers,
+      /*
+       * A blank cell is NOT zero. "I did not count this" and "there are none"
+       * are different claims, and importing the first as the second would take a
+       * catalogue off sale on the strength of an empty column.
+       */
+      stock: rows
+        .filter((row): row is ParsedRow & { stock: number } => row.stock !== null)
+        .map((row) => ({ sku: row.sku, onHand: row.stock })),
     });
   }
 

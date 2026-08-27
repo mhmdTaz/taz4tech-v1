@@ -7,6 +7,7 @@ import {
   productPath,
   toQuickView,
 } from '@modules/catalog';
+import { availabilityBySku } from '@modules/inventory';
 import type { Locale } from '@platform/locale';
 import { textFor } from '@platform/locale';
 import { format } from '@platform/money';
@@ -75,6 +76,21 @@ export const ProductGrid = async ({
       </Panel>
     );
   }
+
+  /*
+   * One stock read for the whole page, joined here.
+   *
+   * Stock lives in its own module and its own document, so this is a second
+   * query rather than a field on the product — the reasoning is written down in
+   * inventory/domain/stock.ts. One `$in` over a page of SKUs, not one lookup
+   * per tile.
+   */
+  const { inventory } = await getContainer();
+  const skusOnPage = page.value.products.flatMap((product) =>
+    product.variants.map((variant) => variant.sku),
+  );
+  const stock = await inventory.getStockLevels(skusOnPage);
+  const availability = availabilityBySku(skusOnPage, stock);
 
   const base = basePath ?? `/${locale}/products`;
   const filtering = hasActiveFilters(params);
@@ -164,7 +180,9 @@ export const ProductGrid = async ({
               */}
               <QuickViewProvider
                 locale={locale}
-                views={page.value.products.map((product) => toQuickView(product, { locale, now }))}
+                views={page.value.products.map((product) =>
+                  toQuickView(product, { locale, now, availability }),
+                )}
                 labels={{
                   quickView: t('quickView'),
                   quickViewOf: t.raw('quickViewOf'),
@@ -176,6 +194,8 @@ export const ProductGrid = async ({
                   offerEnds: t.raw('offerEnds'),
                   chooseOption: t.raw('chooseOption'),
                   sku: t('sku'),
+                  inStock: t('inStock'),
+                  outOfStock: t('outOfStock'),
                 }}
               >
                 <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -183,6 +203,11 @@ export const ProductGrid = async ({
                     const cheapest = defaultVariant(product);
                     const onOffer = isOnOffer(cheapest, now);
                     const image = product.media.find((item) => item.kind === 'image');
+                    // Sold out only when EVERY variant is: a product with one
+                    // size left is still a product the customer can buy.
+                    const soldOut = product.variants.every(
+                      (variant) => availability.get(variant.sku) === 'out_of_stock',
+                    );
 
                     return (
                       <li key={product.id}>
@@ -195,7 +220,16 @@ export const ProductGrid = async ({
                               ? null
                               : { src: image.url, alt: textFor(image.alt, locale) }
                           }
-                          badge={onOffer ? <Badge tone="caution">{t('sale')}</Badge> : undefined}
+                          badge={
+                            // Sold out outranks the sale badge: a discount on
+                            // something unobtainable is the more misleading of the
+                            // two claims.
+                            soldOut ? (
+                              <Badge tone="caution">{t('outOfStock')}</Badge>
+                            ) : onOffer ? (
+                              <Badge tone="caution">{t('sale')}</Badge>
+                            ) : undefined
+                          }
                           action={
                             <QuickViewTrigger
                               slug={product.slug}

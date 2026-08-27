@@ -8,6 +8,7 @@ import {
   productPath,
   type Variant,
 } from '@modules/catalog';
+import { availabilityOf, countToShow, type StockMap } from '@modules/inventory';
 import type { Locale } from '@platform/locale';
 import { textFor } from '@platform/locale';
 import { Price } from '@ui/primitives/price';
@@ -27,10 +28,13 @@ import { getContainer } from '@/composition';
 export const ProductDetail = async ({
   product,
   locale,
+  stock,
   selectedSku,
 }: {
   product: Product;
   locale: Locale;
+  /** SKU -> level. A SKU that is absent is uncounted, which reads as available. */
+  stock: StockMap;
   selectedSku?: string;
 }) => {
   const t = await getTranslations({ locale, namespace: 'products' });
@@ -43,13 +47,29 @@ export const ProductDetail = async ({
   const images = product.media.filter((item) => item.kind === 'image');
   const hero = images[0];
 
+  const selectedAvailability = availabilityOf(stock.get(selected.sku) ?? null);
+  const unitsLeft = countToShow(stock.get(selected.sku) ?? null);
+
+  /*
+   * The AGGREGATE is in stock if ANY variant is.
+   *
+   * A multi-variant product emits one AggregateOffer, and the product really is
+   * obtainable while a single size remains. Marking the whole thing OutOfStock
+   * because one colour ran out would delist a product that can be bought; the
+   * per-variant truth is on the page itself, where the customer is choosing.
+   */
+  const anySellable = product.variants.some(
+    (variant) => availabilityOf(stock.get(variant.sku) ?? null) === 'in_stock',
+  );
+
   const { config } = await getContainer();
   const structuredData = buildProductStructuredData(
     product,
-    // Stock lands in Phase 2. Until then availability is stated once, here, so
-    // there is a single place to wire it up rather than a guess buried in a
-    // serializer.
-    { siteUrl: config.siteUrl, locale, availability: 'InStock' },
+    {
+      siteUrl: config.siteUrl,
+      locale,
+      availability: anySellable ? 'InStock' : 'OutOfStock',
+    },
     now,
   );
 
@@ -197,6 +217,26 @@ export const ProductDetail = async ({
             </div>
           )}
 
+          <p
+            // A status region: the answer changes when the customer picks
+            // another variant, and that change is the point.
+            role="status"
+            className={`text-sm font-medium ${
+              selectedAvailability === 'in_stock' ? 'text-positive' : 'text-negative'
+            }`}
+          >
+            {selectedAvailability === 'in_stock' ? t('inStock') : t('outOfStock')}
+            {/*
+              The count is shown only when there IS one. An uncounted SKU prints
+              nothing rather than a number nobody can stand behind.
+            */}
+            {selectedAvailability === 'in_stock' &&
+              unitsLeft !== null &&
+              unitsLeft <= LOW_STOCK && (
+                <span className="text-caution"> · {t('unitsLeft', { count: unitsLeft })}</span>
+              )}
+          </p>
+
           <dl className="flex flex-col gap-1 text-sm">
             <div className="flex gap-2">
               <dt className="text-muted">{t('sku')}</dt>
@@ -248,6 +288,14 @@ export const ProductDetail = async ({
     </main>
   );
 };
+
+/**
+ * Below this, the remaining count is worth showing.
+ *
+ * "Only 2 left" is a real nudge and a true statement; "Only 47 left" is neither.
+ * A constant rather than a setting until someone actually wants to tune it.
+ */
+const LOW_STOCK = 5;
 
 /**
  * The variant you land on by changing ONE option and keeping the rest.

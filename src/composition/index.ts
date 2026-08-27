@@ -11,7 +11,8 @@
  * in here is a service locator wearing a different hat.
  */
 
-import { type CatalogModule, createCatalogModule } from '@modules/catalog';
+import { type CatalogModule, createCatalogModule, type StockWriter } from '@modules/catalog';
+import { createInventoryModule, type InventoryModule } from '@modules/inventory';
 import { createStoreModule, type StoreModule } from '@modules/store';
 import { type Clock, systemClock } from '@platform/clock';
 import { type Config, getConfig } from '@platform/config';
@@ -29,6 +30,7 @@ export type Container = {
   readonly flags: Flags;
   readonly store: StoreModule;
   readonly catalog: CatalogModule;
+  readonly inventory: InventoryModule;
 };
 
 export const buildContainer = async (): Promise<Container> => {
@@ -46,11 +48,38 @@ export const buildContainer = async (): Promise<Container> => {
   const flags = createFlags();
 
   const store = createStoreModule({ db, storeId: config.storeId });
+  const inventory = createInventoryModule({
+    db,
+    storeId: config.storeId,
+    now: () => clock.now(),
+  });
+
   const catalog = createCatalogModule({
     db,
     storeId: config.storeId,
     now: () => clock.now(),
     nextId: () => ids.next(),
+    /*
+     * The one place that knows both modules exist.
+     *
+     * The catalogue's importer needs somewhere to put the spreadsheet's stock
+     * column; inventory knows how stock is stored. Neither imports the other —
+     * the adapter lives here, which is what a composition root is for.
+     */
+    stock: {
+      setLevels: async (levels: Parameters<StockWriter['setLevels']>[0]) => {
+        const failures: { sku: string; reason: string }[] = [];
+        for (const level of levels) {
+          const result = await inventory.setStockLevel({
+            sku: level.sku,
+            policy: 'tracked',
+            onHand: level.onHand,
+          });
+          if (!result.ok) failures.push({ sku: level.sku, reason: result.error.reason.tag });
+        }
+        return failures;
+      },
+    },
   });
 
   /*
@@ -76,10 +105,10 @@ export const buildContainer = async (): Promise<Container> => {
    * version is still serving. That is the correct outcome: an app running
    * without its unique indexes is corrupting data rather than being degraded.
    */
-  await Promise.all([store.ensureIndexes(), catalog.ensureIndexes()]);
+  await Promise.all([store.ensureIndexes(), catalog.ensureIndexes(), inventory.ensureIndexes()]);
   logger.debug('indexes ensured');
 
-  return { config, db, clock, ids, logger, flags, store, catalog };
+  return { config, db, clock, ids, logger, flags, store, catalog, inventory };
 };
 
 /**

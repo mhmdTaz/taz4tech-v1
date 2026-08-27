@@ -23,6 +23,7 @@ import { type ListProducts, makeListProducts } from './application/list-products
 import { makeSaveCollection, type SaveCollection } from './application/save-collection';
 import { makeSaveProduct, type SaveProduct } from './application/save-product';
 import { makeSearchProducts, type SearchProducts } from './application/search-products';
+import type { StockWriter } from './contracts';
 import {
   createMongoCollectionRepository,
   ensureCollectionIndexes,
@@ -128,6 +129,8 @@ export type {
   ProductRepository,
   SearchProductsQuery,
   SearchResult,
+  StockWriteFailure,
+  StockWriter,
 } from './contracts';
 export type { BulkOperation, BulkOutcome, BulkRefusal } from './domain/bulk-edit';
 export {
@@ -197,6 +200,13 @@ export const createCatalogModule = (deps: {
   storeId: string;
   now: () => Date;
   nextId: () => EntityId<'Product'>;
+  /**
+   * Where the spreadsheet's stock column goes.
+   *
+   * Injected rather than imported: stock is a separate module, and the
+   * composition root is the only place that knows both exist.
+   */
+  stock: StockWriter;
 }): CatalogModule => {
   const repository = createMongoProductRepository(deps.db);
   const collections = createMongoCollectionRepository(deps.db);
@@ -220,6 +230,7 @@ export const createCatalogModule = (deps: {
     importProducts: makeImportProducts({
       ...wiring,
       reader: createXlsxWorkbookReader(),
+      stock: deps.stock,
       now: deps.now,
       nextId: deps.nextId,
     }),

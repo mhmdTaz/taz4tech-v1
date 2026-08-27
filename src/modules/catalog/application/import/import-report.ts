@@ -38,6 +38,8 @@ export type ProductPreview = {
   readonly priceToCents: number;
   readonly currency: Currency;
   readonly imageCount: number;
+  /** Stock levels this row set, per SKU. Empty when the sheet said nothing. */
+  readonly stock: readonly { readonly sku: string; readonly onHand: number }[];
   /** Locales with a title, so the operator can see what still needs translating. */
   readonly translatedInto: readonly Locale[];
 };
@@ -67,6 +69,9 @@ export type ImportReport = {
   readonly skuConflicts: readonly SkuConflict[];
   /** Only ever non-empty after a commit that raced with another write. */
   readonly failures: readonly { readonly slug: string; readonly reason: string }[];
+  /** SKUs whose stock the sheet stated and the write refused. */
+  readonly stockFailures: readonly { readonly sku: string; readonly reason: string }[];
+  readonly stockWritten: number;
   readonly summary: ImportPlan['summary'];
   /** True once a commit has happened; the preview and the receipt share this shape. */
   readonly committed: boolean;
@@ -92,12 +97,14 @@ export type ToImportReportInput = {
   readonly committed: boolean;
   readonly written: number;
   readonly failures: readonly SaveFailure[];
+  readonly stockFailures: readonly { readonly sku: string; readonly reason: string }[];
+  readonly stockWritten: number;
 };
 
 export const toImportReport = (input: ToImportReportInput): ImportReport => {
   const [, ...dataRows] = input.rows;
 
-  const products = input.plan.products.map(({ product, action, rows }): ProductPreview => {
+  const products = input.plan.products.map(({ product, action, rows, stock }): ProductPreview => {
     // The domain's own helper, which folds with reduce and no seed — so "at
     // least one variant" is carried by the type rather than by a length check
     // that could never be false and would sit uncovered under the 100% gate.
@@ -115,6 +122,7 @@ export const toImportReport = (input: ToImportReportInput): ImportReport => {
       priceToCents: to.cents,
       currency: from.currency,
       imageCount: product.media.length,
+      stock,
       translatedInto: LOCALES.filter((locale) => product.title[locale] !== undefined),
     };
   });
@@ -138,5 +146,7 @@ export const toImportReport = (input: ToImportReportInput): ImportReport => {
     summary: input.plan.summary,
     committed: input.committed,
     written: input.written,
+    stockFailures: input.stockFailures,
+    stockWritten: input.stockWritten,
   };
 };

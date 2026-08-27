@@ -241,6 +241,40 @@ store settings are real configuration, three fake laptops are not. The fixtures
 cover the awkward shapes on purpose — an incomplete variant matrix, a live offer,
 a product with no imagery, and a draft that must stay hidden.
 
+## Stock
+
+Stock is a **separate document in a separate module**, and both halves of that
+are load-bearing.
+
+Variants live inside the product; their counts do not. Storing them there would
+mean every sale rewrites the whole product document — and with it the derived
+`searchText` field and every index entry depending on it, so a shop that sells
+well would spend its write budget re-indexing descriptions that did not change.
+
+More importantly, **selling the last unit twice is a database problem.** It is
+prevented by a conditional update on one small document — *decrement where at
+least this many remain* — which is only available if that document is the unit of
+contention. Read the level, decide, then write, and the race is back whatever the
+application layer does in between. The integration test fires twenty-five
+concurrent decrements at ten units and asserts that exactly ten succeed.
+
+**Absence means untracked, not zero.** A SKU with no record is not out of stock —
+it is a SKU nobody chose to count. The opposite default would make importing a
+catalogue render every product unbuyable on day one; tracking is opted into per
+SKU, which is how a small shop works. A blank cell in the importer's `Stock`
+column therefore writes *nothing*, while an explicit `0` writes sold out.
+
+The storefront says what it can stand behind: a count only below a low-stock
+threshold ("Only 2 left"), nothing at all for an uncounted SKU, and a sold-out
+badge on a tile only when **every** variant has run out — a product with one size
+left is still one the customer can buy. JSON-LD follows the same rule, because
+marking a whole product `OutOfStock` because one colour ran out delists something
+that can be bought.
+
+The `_id` is the natural key, length-prefixed: `8:taz4tech:SKU-1`. A plain
+`storeId:sku` join is ambiguous the moment a SKU contains the separator, and SKUs
+come from other people's spreadsheets.
+
 ## Quick view
 
 A peek at a product from the listing, without losing your place in the grid.
@@ -463,18 +497,26 @@ conflict still throws: a dropped connection must never be reported as
 
 ## Open decisions
 
-- **`allocate()`** in `src/platform/money/allocate.ts` is unimplemented. Splitting
-  a cart discount across line items without losing a cent is an accounting policy
-  choice, not a mathematical one. The tests in `allocate.test.ts` already pin
-  every invariant and are marked `describe.skip` until it is written.
+- **Stryker** mutation testing on the domain layer was a Phase 1 item and did
+  not land. Phase 1 is closed; it is either a Phase 2 task or a decision to drop.
 - **VAT.** 11% is configured. Whether this store must register depends on the
   LBP 5bn threshold; advisory sources claim importers must register regardless of
   turnover, but that is not primary-sourced and needs a Lebanese tax adviser.
-- **Stryker** mutation testing on the domain layer lands in Phase 1, per the plan.
 - **Lighthouse runs the `desktop` preset**, while most Lebanese traffic is mobile
   — the Playwright config already treats a mobile viewport as a first-class
   target. A performance gate measuring desktop is measuring the wrong device.
   Switching it makes the >= 95 bar substantially harder, so it is a deliberate
-  Phase 1 decision rather than a quiet change.
+  decision rather than a quiet change — still outstanding now Phase 1 has closed.
+- **The listing is invisible without JavaScript.** The grid sits behind a
+  Suspense boundary and React swaps streamed content in with an inline script, so
+  a JS-disabled browser sits on the skeleton. The markup is all in the response,
+  so a crawler that does not execute JavaScript still sees every tile. Removing
+  the boundary would block the page shell on a database query; keeping it leaves
+  the one place the storefront does not keep its no-JS promise.
+- **An expired offer blocks every edit to a product.** `createProduct` refuses a
+  product whose `offerEndsAt` is in the past, so an old product cannot be
+  archived until its offer is cleared. `clear offers` in the bulk editor exists
+  to unstick that, and the refusal says so — but this is friction that arrives
+  monthly as offers age.
 
 *General information from primary sources, not legal advice.*

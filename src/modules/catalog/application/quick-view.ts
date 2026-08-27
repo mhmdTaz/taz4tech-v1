@@ -29,6 +29,16 @@ export type QuickViewOption = {
   readonly value: string;
 };
 
+/**
+ * Stock, as the catalogue is willing to talk about it.
+ *
+ * The catalogue does not know what stock is — it is a separate module with a
+ * separate document, for reasons written down there. The caller supplies this,
+ * exactly as it supplies availability to the JSON-LD builder, so the decision
+ * stays visible at the composition point instead of being invented here.
+ */
+export type SkuAvailability = 'in_stock' | 'out_of_stock';
+
 export type QuickViewVariant = {
   readonly sku: string;
   readonly options: readonly QuickViewOption[];
@@ -37,6 +47,7 @@ export type QuickViewVariant = {
   readonly compareAtCents: number | null;
   /** ISO 8601, or null. Rendered because the law requires the expiry to be shown. */
   readonly offerEndsAt: string | null;
+  readonly availability: SkuAvailability;
 };
 
 export type QuickView = {
@@ -49,7 +60,14 @@ export type QuickView = {
   readonly images: readonly { readonly url: string; readonly alt: string }[];
   readonly optionNames: readonly string[];
   readonly variants: readonly QuickViewVariant[];
-  /** The variant shown first: the cheapest, so the quoted price is never a surprise. */
+  /**
+   * The variant shown first: the cheapest one that can actually be bought.
+   *
+   * Opening on a sold-out variant quotes a price the customer cannot have, and
+   * makes the dialog's first impression a disabled button. The cheapest overall
+   * is the fallback when nothing is in stock, so the price shown still matches
+   * the tile they clicked.
+   */
   readonly defaultSku: string;
   readonly currency: Currency;
 };
@@ -57,6 +75,11 @@ export type QuickView = {
 export type QuickViewOptions = {
   readonly locale: Locale;
   readonly now: Date;
+  /**
+   * SKU -> availability. A SKU that is absent reads as IN STOCK, matching the
+   * inventory module's rule that an uncounted SKU is not one that ran out.
+   */
+  readonly availability?: ReadonlyMap<string, SkuAvailability>;
 };
 
 /**
@@ -78,9 +101,30 @@ const liveOffer = (
   return { compareAtCents: compareAtPrice.cents, offerEndsAt: offerEndsAt.toISOString() };
 };
 
+/**
+ * The cheapest variant that can actually be bought, or the cheapest overall.
+ *
+ * Falling back rather than showing nothing keeps the quoted price matching the
+ * tile the customer just clicked, even when the whole product is sold out.
+ */
+const cheapestSellable = (
+  product: Product,
+  availabilityOf: (sku: string) => SkuAvailability,
+  fallback: Variant,
+): Variant => {
+  const sellable = product.variants.filter((variant) => availabilityOf(variant.sku) === 'in_stock');
+  if (sellable.length === 0) return fallback;
+
+  return sellable.reduce((cheapest, variant) =>
+    variant.price.cents < cheapest.price.cents ? variant : cheapest,
+  );
+};
+
 export const toQuickView = (product: Product, options: QuickViewOptions): QuickView => {
   const { locale, now } = options;
   const cheapest = defaultVariant(product);
+  const availabilityOf = (sku: string): SkuAvailability =>
+    options.availability?.get(sku) ?? 'in_stock';
 
   return {
     slug: product.slug,
@@ -100,9 +144,10 @@ export const toQuickView = (product: Product, options: QuickViewOptions): QuickV
         priceCents: variant.price.cents,
         compareAtCents: offer === null ? null : offer.compareAtCents,
         offerEndsAt: offer === null ? null : offer.offerEndsAt,
+        availability: availabilityOf(variant.sku),
       };
     }),
-    defaultSku: cheapest.sku,
+    defaultSku: cheapestSellable(product, availabilityOf, cheapest).sku,
     currency: cheapest.price.currency,
   };
 };

@@ -155,6 +155,26 @@ export interface ProductRepository {
   save(product: Product): Promise<Result<void, SaveConflict>>;
 }
 
+/**
+ * Somewhere to put the stock column of a catalogue spreadsheet.
+ *
+ * Stock is a separate document in a separate module, and the catalogue has no
+ * business knowing how it is stored. It arrives in the same file because that is
+ * how a supplier sends a price list — asking an operator to maintain two files
+ * describing one delivery is asking them to keep one of them wrong.
+ *
+ * So: the catalogue owns this INTERFACE, the composition root wires the
+ * inventory module into it, and neither module imports the other.
+ */
+export type StockWriteFailure = { readonly sku: string; readonly reason: string };
+
+export interface StockWriter {
+  /** Returns only what it could not write; an empty array means all of it landed. */
+  setLevels(
+    levels: readonly { readonly sku: string; readonly onHand: number }[],
+  ): Promise<readonly StockWriteFailure[]>;
+}
+
 /** A unique index refused the write. Which one is what the caller has to report. */
 export type SaveConflict =
   | { readonly tag: 'sku_taken'; readonly sku: string }
