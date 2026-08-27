@@ -11,6 +11,7 @@
  * in here is a service locator wearing a different hat.
  */
 
+import { type CartModule, createCartModule } from '@modules/cart';
 import { type CatalogModule, createCatalogModule, type StockWriter } from '@modules/catalog';
 import { createInventoryModule, type InventoryModule } from '@modules/inventory';
 import { createStoreModule, type StoreModule } from '@modules/store';
@@ -31,6 +32,7 @@ export type Container = {
   readonly store: StoreModule;
   readonly catalog: CatalogModule;
   readonly inventory: InventoryModule;
+  readonly cart: CartModule;
 };
 
 export const buildContainer = async (): Promise<Container> => {
@@ -105,10 +107,22 @@ export const buildContainer = async (): Promise<Container> => {
    * version is still serving. That is the correct outcome: an app running
    * without its unique indexes is corrupting data rather than being degraded.
    */
+  /*
+   * The cart prices against the catalogue and inventory, and stores nothing of
+   * its own — it is a cookie. Both dependencies are plain functions rather than
+   * module handles, so the cart module cannot reach past the two use cases it
+   * actually needs.
+   */
+  const cart = createCartModule({
+    products: (skus) => catalog.getProductsBySkus({ skus }),
+    stock: (skus) => inventory.getStockLevels(skus),
+    now: () => clock.now(),
+  });
+
   await Promise.all([store.ensureIndexes(), catalog.ensureIndexes(), inventory.ensureIndexes()]);
   logger.debug('indexes ensured');
 
-  return { config, db, clock, ids, logger, flags, store, catalog, inventory };
+  return { config, db, clock, ids, logger, flags, store, catalog, inventory, cart };
 };
 
 /**

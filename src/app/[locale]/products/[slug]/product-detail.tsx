@@ -16,6 +16,7 @@ import { Badge } from '@ui/primitives/product-card';
 import { SpecTable } from '@ui/primitives/spec-table';
 import { getTranslations } from 'next-intl/server';
 import { getContainer } from '@/composition';
+import { AddToCart } from '../../cart/add-to-cart';
 
 /**
  * Product detail.
@@ -29,12 +30,15 @@ export const ProductDetail = async ({
   product,
   locale,
   stock,
+  cartQuantity,
   selectedSku,
 }: {
   product: Product;
   locale: Locale;
   /** SKU -> level. A SKU that is absent is uncounted, which reads as available. */
   stock: StockMap;
+  /** SKU -> how many are already in the cart. */
+  cartQuantity: ReadonlyMap<string, number>;
   selectedSku?: string;
 }) => {
   const t = await getTranslations({ locale, namespace: 'products' });
@@ -236,6 +240,19 @@ export const ProductDetail = async ({
                 <span className="text-caution"> · {t('unitsLeft', { count: unitsLeft })}</span>
               )}
           </p>
+
+          {/*
+            Shown and refused rather than hidden when out of stock: a control
+            that disappears reads as a broken page, while a disabled one beside
+            "Out of stock" reads as the shop being honest.
+          */}
+          <AddToCart
+            sku={selected.sku}
+            locale={locale}
+            returnTo={`${productPath(locale, product.slug)}?variant=${encodeURIComponent(selected.sku)}`}
+            disabled={selectedAvailability === 'out_of_stock'}
+            quantityInCart={cartQuantity.get(selected.sku) ?? 0}
+          />
 
           <dl className="flex flex-col gap-1 text-sm">
             <div className="flex gap-2">

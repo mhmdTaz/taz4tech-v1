@@ -241,6 +241,43 @@ store settings are real configuration, three fake laptops are not. The fixtures
 cover the awkward shapes on purpose — an incomplete variant matrix, a live offer,
 a product with no imagery, and a draft that must stay hidden.
 
+## The cart
+
+**It is a cookie, not a document.** A cart is a list of SKUs and quantities — a
+few hundred bytes — and a server-side one would buy a collection, a TTL sweep for
+abandoned rows, an id cookie anyway, and a database read on every page that shows
+a cart count. None of that is paid for by anything a customer notices. It also
+fails safe: a corrupted cookie is an empty cart the customer refills, not a 500.
+
+**What is deliberately not in it: prices.** The cookie is under the customer's
+control, so a cart carrying its own prices is a cart the customer can set the
+price in. Every amount is read live from the catalogue at render time, through
+the same status gate the listing uses — so a product archived while a cart sat
+open stops being purchasable, and a SKU asked for directly cannot reach around
+it.
+
+**Nothing is reserved.** Reserving at add-to-cart would let anyone empty the shop
+by filling a cart, and a COD shop with one operator has no basket-expiry process
+to release them again. Stock moves exactly once, atomically, when an order is
+placed. Until then the cart tells the truth about availability and refuses
+nothing.
+
+**Every control is a plain `<form>`.** Adding, updating and removing all post as
+ordinary requests before hydration and with JavaScript unavailable — a button
+that silently does nothing is the worst version of this control on a slow
+connection. Each form carries where it came from, so adding a second thing costs
+no navigation.
+
+A line that no longer resolves is **reported, and cleared by a button** rather
+than by rendering the page. The technical reason is that a Server Component
+cannot set a cookie; the better one is that a cart which quietly shrinks while
+you look at it is a customer wondering what they forgot.
+
+**Prices are VAT-inclusive.** Lebanese retail quotes what the customer pays, so
+nothing is added on top. Whether a "of which VAT" line can be broken out depends
+on registration, which is not settled — and it is derivable from the same totals
+later without changing what anybody pays.
+
 ## Stock
 
 Stock is a **separate document in a separate module**, and both halves of that

@@ -65,5 +65,33 @@
     "curated": "Sélection",
     "breadcrumb": "Fil d'Ariane",
     "notFoundTitle": "Collection introuvable"
+  },
+  "cart": {
+    "title": "Panier",
+    "metaTitle": "Votre panier",
+    "empty": "Votre panier est vide.",
+    "continueShopping": "Continuer les achats",
+    "subtotal": "Sous-total",
+    "quantity": "Quantité",
+    "update": "Mettre à jour",
+    "remove": "Retirer",
+    "addToCart": "Ajouter au panier",
+    "inCart": "{count} dans le panier",
+    "checkout": "Commander",
+    "checkoutSoon": "La commande arrive à la prochaine version.",
+    "removedTitle": "Plus disponible",
+    "removedBody": "{count} article(s) ont été retirés car ils ne sont plus en vente.",
+    "onlyLeft": "Plus que {count} — réduisez la quantité pour commander.",
+    "noneLeft": "Rupture de stock — retirez cette ligne pour commander le reste.",
+    "itemCount": "{count, plural, =0 {Panier} one {Panier, # article} other {Panier, # articles}}",
+    "vatNote": "Prix TTC le cas échéant. Paiement à la livraison partout au Liban.",
+    "removedClear": "Les retirer"
+  },
+  "nav": {
+    "products": "Produits",
+    "collections": "Collections",
+    "home": "Accueil",
+    "skipToContent": "Aller au contenu",
+    "primary": "Navigation principale"
   }
 }

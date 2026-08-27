@@ -18,6 +18,7 @@ import {
   makeListCollections,
 } from './application/get-collection';
 import { type GetProductBySlug, makeGetProductBySlug } from './application/get-product-by-slug';
+import { type GetProductsBySkus, makeGetProductsBySkus } from './application/get-products-by-skus';
 import { type ImportProducts, makeImportProducts } from './application/import-products';
 import { type ListProducts, makeListProducts } from './application/list-products';
 import { makeSaveCollection, type SaveCollection } from './application/save-collection';
@@ -53,6 +54,10 @@ export type {
   ListCollections,
 } from './application/get-collection';
 export type { GetProductBySlug, GetProductBySlugError } from './application/get-product-by-slug';
+export type {
+  GetProductsBySkus,
+  GetProductsBySkusInput,
+} from './application/get-products-by-skus';
 export type {
   ColumnMapping,
   ImportField,
@@ -183,6 +188,7 @@ export { expandSearchTerms, isSearchable, normaliseSearchText } from './domain/s
 
 export type CatalogModule = {
   readonly getProductBySlug: GetProductBySlug;
+  readonly getProductsBySkus: GetProductsBySkus;
   readonly listProducts: ListProducts;
   readonly saveProduct: SaveProduct;
   readonly importProducts: ImportProducts;
@@ -215,6 +221,7 @@ export const createCatalogModule = (deps: {
 
   return {
     getProductBySlug: makeGetProductBySlug(wiring),
+    getProductsBySkus: makeGetProductsBySkus(wiring),
     listProducts: makeListProducts(wiring),
     saveProduct: makeSaveProduct({ ...wiring, now: deps.now }),
     searchProducts: makeSearchProducts(wiring),

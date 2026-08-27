@@ -6,6 +6,7 @@ import { connection } from 'next/server';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { cache } from 'react';
 import { getContainer } from '@/composition';
+import { readCart } from '../../cart/cookie';
 import { ProductDetail } from './product-detail';
 
 type PageProps = {
@@ -88,11 +89,16 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
   const { inventory } = await getContainer();
   const stock = await inventory.getStockLevels(product.variants.map((each) => each.sku));
 
+  // From the cookie, so it costs no query — the cart holds SKUs and quantities.
+  const cart = await readCart();
+  const cartQuantity = new Map(cart.lines.map((line) => [line.sku, line.quantity]));
+
   return (
     <ProductDetail
       product={product}
       locale={locale as Locale}
       stock={stock}
+      cartQuantity={cartQuantity}
       {...(variant === undefined ? {} : { selectedSku: variant })}
     />
   );

@@ -65,5 +65,33 @@
     "curated": "Hand-picked",
     "breadcrumb": "Breadcrumb",
     "notFoundTitle": "Collection not found"
+  },
+  "cart": {
+    "title": "Cart",
+    "metaTitle": "Your cart",
+    "empty": "Your cart is empty.",
+    "continueShopping": "Continue shopping",
+    "subtotal": "Subtotal",
+    "quantity": "Quantity",
+    "update": "Update",
+    "remove": "Remove",
+    "addToCart": "Add to cart",
+    "inCart": "{count} in cart",
+    "checkout": "Checkout",
+    "checkoutSoon": "Checkout arrives with the next release.",
+    "removedTitle": "No longer available",
+    "removedBody": "{count} item(s) were removed because they are no longer on sale.",
+    "onlyLeft": "Only {count} left — reduce the quantity to order.",
+    "noneLeft": "Out of stock — remove this line to order the rest.",
+    "itemCount": "{count, plural, =0 {Cart} one {Cart, # item} other {Cart, # items}}",
+    "vatNote": "Prices include VAT where it applies. Cash on delivery across Lebanon.",
+    "removedClear": "Clear them"
+  },
+  "nav": {
+    "products": "Products",
+    "collections": "Collections",
+    "home": "Home",
+    "skipToContent": "Skip to content",
+    "primary": "Primary"
   }
 }
