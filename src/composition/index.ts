@@ -15,7 +15,7 @@ import { type CartModule, createCartModule } from '@modules/cart';
 import { type CatalogModule, createCatalogModule, type StockWriter } from '@modules/catalog';
 import { createInventoryModule, type InventoryModule } from '@modules/inventory';
 import { createOrdersModule, type OrdersModule } from '@modules/orders';
-import { createStoreModule, type StoreModule } from '@modules/store';
+import { createStoreModule, deliveryFeeFor, type StoreModule } from '@modules/store';
 import { type Clock, systemClock } from '@platform/clock';
 import { type Config, getConfig } from '@platform/config';
 import { createFlags, type Flags } from '@platform/flags';
@@ -159,11 +159,11 @@ export const buildContainer = async (): Promise<Container> => {
         await inventory.adjustStock(sku, quantity);
       },
     },
-    deliveryFeeCents: async () => {
+    deliveryFeeCents: async (region) => {
       const settings = await store.getStoreSettings();
       // No settings document yet means a shop that has not been configured;
       // charging a delivery fee nobody set would be worse than charging none.
-      return settings.ok ? settings.value.deliveryFeeCents : 0;
+      return settings.ok ? deliveryFeeFor(settings.value, region) : 0;
     },
     now: () => clock.now(),
     nextId: () => ids.next(),

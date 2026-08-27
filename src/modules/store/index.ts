@@ -28,7 +28,13 @@ export type {
 export { toForm } from './application/update-store-settings';
 export type { StoreSettingsRepository } from './contracts';
 export type { StoreSettings, StoreSettingsError } from './domain/store-settings';
-export { createStoreSettings, showsRegistryNumber, vatRate } from './domain/store-settings';
+export {
+  createStoreSettings,
+  deliveryFeeFor,
+  deliverySpread,
+  showsRegistryNumber,
+  vatRate,
+} from './domain/store-settings';
 
 export type StoreModule = {
   readonly getStoreSettings: GetStoreSettings;

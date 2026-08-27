@@ -110,6 +110,8 @@
     "delivery": "Livraison",
     "total": "Total",
     "free": "Gratuit",
+    "deliveryByRegion": "Selon le gouvernorat",
+    "totalFrom": "À partir de {amount}",
     "placeOrder": "Commander — paiement à la livraison",
     "codNote": "Vous payez le livreur en espèces à la réception. Rien n’est débité maintenant.",
     "backToCart": "Retour au panier",

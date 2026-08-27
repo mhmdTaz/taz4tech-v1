@@ -12,6 +12,7 @@
  */
 
 import { LOCALES } from '@platform/locale';
+import { type ByRegion, REGIONS, type Region } from '@platform/regions';
 import type { Collection, Db } from 'mongodb';
 import { z } from 'zod';
 import type { StoreSettingsRepository } from '../contracts';
@@ -29,12 +30,43 @@ const StoreSettingsDocument = z.object({
   vatBasisPoints: z.number().int(),
   commercialRegistryNumber: z.string().nullable(),
   /*
-   * Defaulted rather than required, so a settings document written before this
-   * field existed still reads. The alternative is a store that stops booting
-   * because a field it never had is missing — a migration disguised as a schema.
+   * Both shapes, because both exist in the wild.
+   *
+   * `deliveryFeeCents` is the flat fee this shop charged before delivery was
+   * priced per governorate. A document written then still reads: the flat number
+   * meant "this much, everywhere", so that is exactly what it becomes. The
+   * alternative is a store that stops booting because a field it never had is
+   * missing — a migration disguised as a schema.
    */
-  deliveryFeeCents: z.number().int().min(0).default(0),
+  deliveryFeeCents: z.number().int().min(0).optional(),
+  /*
+   * partialRecord, not record: with an enum key Zod's `record` is EXHAUSTIVE and
+   * would reject a document that prices seven governorates. Completeness is the
+   * domain's job — it fills the gaps here and then refuses what is still missing
+   * — and a schema that throws on a half-written table would take the whole shop
+   * down rather than the one price.
+   */
+  deliveryFees: z.partialRecord(z.enum(REGIONS), z.number().int().min(0)).optional(),
 });
+
+/**
+ * One price per governorate, whichever shape the document is in.
+ *
+ * A table wins over the legacy flat fee, and a table missing a governorate is
+ * filled from the flat fee rather than from zero — an absent price is a price
+ * nobody set, and reading it as free would quietly give away every delivery to
+ * that governorate.
+ */
+const feesFrom = (document: {
+  deliveryFeeCents?: number | undefined;
+  deliveryFees?: Partial<Record<Region, number>> | undefined;
+}): ByRegion<number> => {
+  const fallback = document.deliveryFeeCents ?? 0;
+  const table = document.deliveryFees ?? {};
+  return Object.fromEntries(
+    REGIONS.map((region) => [region, table[region] ?? fallback]),
+  ) as ByRegion<number>;
+};
 
 type StoreSettingsDocumentShape = z.infer<typeof StoreSettingsDocument>;
 
@@ -57,7 +89,7 @@ export const createMongoStoreSettingsRepository = (db: Db): StoreSettingsReposit
         );
       }
 
-      const settings = createStoreSettings(parsed.data);
+      const settings = createStoreSettings({ ...parsed.data, deliveryFees: feesFrom(parsed.data) });
       if (!settings.ok) {
         throw new Error(
           `storeSettings document for "${storeId}" violates a domain invariant: ${JSON.stringify(settings.error)}`,
@@ -69,7 +101,17 @@ export const createMongoStoreSettingsRepository = (db: Db): StoreSettingsReposit
     async save(settings: StoreSettings): Promise<void> {
       await collection.updateOne(
         { storeId: settings.storeId },
-        { $set: { ...settings, locales: [...settings.locales] } },
+        {
+          $set: {
+            ...settings,
+            locales: [...settings.locales],
+            deliveryFees: { ...settings.deliveryFees },
+          },
+          // The flat fee is superseded, not merely unused. Leaving it behind
+          // would be a second, stale answer to what delivery costs, sitting in
+          // the document looking authoritative.
+          $unset: { deliveryFeeCents: '' },
+        },
         { upsert: true },
       );
     },

@@ -23,6 +23,7 @@
 
 import { parse as parseAmount } from '@platform/money';
 import { type PhoneError, parseLebanesePhone } from '@platform/phone';
+import { type ByRegion, REGIONS, type Region } from '@platform/regions';
 import { err, ok, type Result } from '@platform/result';
 import type { StoreSettingsRepository } from '../contracts';
 import {
@@ -39,8 +40,11 @@ export type StoreSettingsForm = {
   readonly commercialRegistryNumber: string;
   /** A percentage as a human writes it: "11", "11.5". */
   readonly vatPercent: string;
-  /** An amount as a human writes it: "3", "3.50", "$3.50". */
-  readonly deliveryFee: string;
+  /**
+   * What delivery costs, per governorate, as a human writes it: "3", "3.50",
+   * "$3.50". All eight, because the stored table has no gaps and no fallback.
+   */
+  readonly deliveryFees: ByRegion<string>;
 };
 
 export type UpdateStoreSettingsError =
@@ -48,7 +52,7 @@ export type UpdateStoreSettingsError =
   | { readonly tag: 'not_configured'; readonly storeId: string }
   | { readonly tag: 'phone_invalid'; readonly reason: PhoneError }
   | { readonly tag: 'vat_unparsable'; readonly input: string }
-  | { readonly tag: 'delivery_fee_unparsable'; readonly input: string }
+  | { readonly tag: 'delivery_fee_unparsable'; readonly region: Region; readonly input: string }
   /** The domain refused the result — out-of-range VAT, a negative fee, an empty name. */
   | { readonly tag: 'invalid'; readonly reason: StoreSettingsError };
 
@@ -96,8 +100,20 @@ export const makeUpdateStoreSettings =
     const vat = hundredths(form.vatPercent);
     if (!vat.ok) return err({ tag: 'vat_unparsable', input: form.vatPercent });
 
-    const fee = hundredths(form.deliveryFee);
-    if (!fee.ok) return err({ tag: 'delivery_fee_unparsable', input: form.deliveryFee });
+    /*
+     * Every governorate, and the FIRST failure names which one.
+     *
+     * "The delivery fee could not be read" on a screen with eight of them is a
+     * message that sends the operator hunting. The region travels with the error
+     * so the page can outline the box.
+     */
+    const fees: Partial<Record<Region, number>> = {};
+    for (const region of REGIONS) {
+      const typed = form.deliveryFees[region];
+      const parsed = hundredths(typed);
+      if (!parsed.ok) return err({ tag: 'delivery_fee_unparsable', region, input: typed });
+      fees[region] = parsed.value;
+    }
 
     // Blank is null, not "". The storefront hides the registry line rather than
     // printing an empty label, and it decides that by asking whether it is null.
@@ -109,7 +125,9 @@ export const makeUpdateStoreSettings =
       contactPhone: phone.value,
       commercialRegistryNumber: registry.length === 0 ? null : registry,
       vatBasisPoints: vat.value,
-      deliveryFeeCents: fee.value,
+      // The loop above ran over REGIONS itself and returned on the first
+      // failure, so reaching here means every governorate has a price.
+      deliveryFees: fees as ByRegion<number>,
     });
     if (!settings.ok) return err({ tag: 'invalid', reason: settings.error });
 
@@ -124,5 +142,9 @@ export const toForm = (settings: StoreSettings): StoreSettingsForm => ({
   commercialRegistryNumber: settings.commercialRegistryNumber ?? '',
   // Two decimals both ways: 1100 shows as "11.00" and reads back as 1100.
   vatPercent: (settings.vatBasisPoints / 100).toFixed(2),
-  deliveryFee: (settings.deliveryFeeCents / 100).toFixed(2),
+  deliveryFees: mapRegions((region) => (settings.deliveryFees[region] / 100).toFixed(2)),
 });
+
+/** Build a full table from a function of the governorate. */
+const mapRegions = <T>(of: (region: Region) => T): ByRegion<T> =>
+  Object.fromEntries(REGIONS.map((region) => [region, of(region)])) as ByRegion<T>;

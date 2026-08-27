@@ -32,7 +32,7 @@ points outward.
 src/app/          Next.js. Delivery only: parse input, call one use case, render.
 src/composition/  The one place that knows everything. Builds the object graph.
 src/modules/      Per-domain business logic. domain / application / infrastructure / contracts
-src/platform/     Result, Money, ids, clock, logger, config, flags, mongo
+src/platform/     Result, Money, ids, clock, logger, config, flags, mongo, phone, regions
 src/ui/           Design system. Pure components, no data fetching.
 src/i18n/         Locale routing and message loading.
 ```
@@ -67,6 +67,16 @@ import { makeGetStoreSettings } from '@modules/store/application/…';  // build
 Each module exposes a `createXModule({ db, storeId })` factory that wires its own
 adapters. The composition root passes in platform services and gets use cases
 back — it never sees a repository or a collection name.
+
+**A vocabulary two modules both need belongs in platform, not in one of them.**
+Lebanon's eight governorates started in the orders domain, where an order records
+where it is going. Then delivery got a price per governorate, which is a shop
+policy and lives in store settings — and a module may not reach into another
+module's domain. Importing the orders *barrel* would have worked and been worse:
+a barrel pulls a module's infrastructure with it, so the store domain would have
+depended, transitively, on the Mongo driver. `@platform/regions` is the answer
+the boundary rule already suggests, and it sits beside `@platform/phone`, which
+has known Lebanon's calling code since Phase 0.
 
 ### Errors
 
@@ -288,11 +298,21 @@ it. The constraint does the work, not a check that two requests could both pass.
 customers checking out in the same second cannot be handed one number — it is
 spoken on the phone and printed on a box.
 
-Delivery is a **flat fee** on store settings, zero by default, edited on the
-[settings screen](#store-settings). Cost genuinely varies by governorate in
-Lebanon, so a per-region table is the obvious next step — what is missing now is
-not a screen but the eight prices. The region is recorded on every order, so
-they can be set from real deliveries rather than guessed.
+Delivery is priced **per governorate** — Beirut is not Akkar — from a table on
+store settings, edited on the [settings screen](#store-settings). The table is
+complete: all eight, no default and no overrides, because a fallback is a second
+answer to what delivery to Akkar costs and that is how a checkout quotes one
+number and an order charges another.
+
+The checkout page is rendered before the customer has chosen where they live, so
+what it can honestly quote depends on the table. **When every governorate costs
+the same — which is what a flat rate looks like here — it quotes the exact
+total.** When they differ it says *From $21.00* and puts each price inside its
+own option in the governorate list: `Akkar — $8.00`. The price is in the dropdown,
+so it is in front of the customer at the moment they choose, with no JavaScript
+and no reload. The order itself is always priced from the region that was
+actually posted, so the total on the confirmation is never a number the checkout
+page invented.
 
 ## The cart
 
@@ -505,8 +525,8 @@ The shop's own details, and what delivery costs.
 
 **Every box on this screen changes something a customer can see.** The name, the
 phone number and the registry number appear on the storefront; the VAT rate is
-what the shop quotes; the delivery fee is added to every order. Nothing else is
-offered as a field.
+what the shop quotes; the delivery prices are what every order is charged.
+Nothing else is offered as a field.
 
 That rule is the whole design of the screen. `StoreSettings` also holds the
 locales, the default locale and a site URL — and none of those are read at
@@ -539,9 +559,29 @@ empties itself because one field was wrong is a form nobody fills in twice. The
 error names the box rather than the failure, so the page can outline the field
 that is wrong instead of printing a paragraph asking the operator to find it.
 
-Changing the delivery fee does not change orders already placed — they are
-snapshots — and the screen says so next to the field, because that is the first
-thing an operator worries about.
+### Delivery, by governorate
+
+Eight boxes, one per governorate, rather than one fee plus a list of exceptions.
+A default that applies "unless" is a second answer to what delivery to Akkar
+costs, and the whole point of an order being a snapshot is that there is exactly
+one. A shop with a single price everywhere types it eight times, which is cheap;
+a shop with a wrong price for one governorate is not.
+
+**All eight save or none do.** One unreadable box refuses the whole form — and
+the refusal names the governorate, because "the delivery fee could not be read"
+on a screen with eight of them sends the operator hunting. Saving seven and
+rejecting the eighth would leave the shop charging a mixture of what the operator
+meant and what it used to be.
+
+Changing a price does not change orders already placed — they are snapshots — and
+the screen says so above the fields, because that is the first thing an operator
+worries about.
+
+The old flat `deliveryFeeCents` still exists in documents written before this,
+and is **read as "that much, everywhere"**: the number always meant that, and now
+it says so. It is `$unset` the first time settings are saved, because a
+superseded field left in the document is a second, stale answer sitting there
+looking authoritative.
 
 ## The admin order screen
 
@@ -716,10 +756,10 @@ conflict still throws: a dropped connection must never be reported as
   them, but the stored copies are still there, still able to drift, and still
   looking authoritative to whoever reads the document next. Either wire them up
   or drop them.
-- **Delivery is one flat fee for the whole country.** Beirut is not Akkar, the
-  region is on every order, and the screen to edit a per-governorate table now
-  exists. What is missing is eight real prices — worth setting from deliveries
-  that have happened rather than from a guess made today.
+- **The eight delivery prices are all zero.** The table exists and the screen
+  edits it; nobody has priced a governorate yet. Worth setting from deliveries
+  that have actually happened rather than from a guess — until then the shop
+  delivers free, which is at least a number it can honour.
 - **An order is found only by browsing.** The orders list filters by status and
   pages by cursor, but there is no search. A customer phones, says "I ordered
   yesterday", and the operator pages until they see the name. Searching by phone

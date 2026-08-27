@@ -11,6 +11,7 @@
  * can write a document the domain would have rejected.
  */
 
+import { sameEverywhere } from '@platform/regions';
 import { getContainer } from '../src/composition/index.js';
 import { closeMongo } from '../src/platform/mongo/index.js';
 
@@ -32,9 +33,10 @@ const main = async (): Promise<void> => {
     // Law 81/2018 Art. 31. Null until the business is registered; the storefront
     // hides the line rather than printing an empty label.
     commercialRegistryNumber: null,
-    // Flat and free to start. The region is recorded on every order, so a
-    // per-governorate table can be priced from real deliveries later.
-    deliveryFeeCents: 0,
+    // Free to every governorate to start. The table is complete rather than a
+    // default plus overrides, so there is exactly one answer to what delivery
+    // costs anywhere — and real prices go in through the settings screen.
+    deliveryFees: sameEverywhere(0),
   });
 
   if (!result.ok) {

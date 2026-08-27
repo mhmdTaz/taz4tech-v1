@@ -1,5 +1,6 @@
 import { type StoreSettingsForm, toForm } from '@modules/store';
 import { LOCALES } from '@platform/locale';
+import { type ByRegion, REGIONS, type Region } from '@platform/regions';
 import { getContainer } from '@/composition';
 import { AdminNav } from '../nav';
 import { requireAdmin } from '../session';
@@ -18,10 +19,22 @@ const one = (value: string | string[] | undefined): string | undefined =>
 const input =
   'w-full rounded-lg border border-hairline bg-raised px-3 py-2.5 text-base text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
+/** English, like the rest of the admin. The storefront translates these itself. */
+const REGION_LABELS: ByRegion<string> = {
+  beirut: 'Beirut',
+  mount_lebanon: 'Mount Lebanon',
+  north: 'North',
+  akkar: 'Akkar',
+  bekaa: 'Bekaa',
+  baalbek_hermel: 'Baalbek-Hermel',
+  south: 'South',
+  nabatieh: 'Nabatieh',
+};
+
 const MESSAGES: Record<string, string> = {
   phone: 'That phone number could not be read. Write it as 03 123 456 or +961 3 123 456.',
   vat: 'The VAT rate has to be a percentage between 0 and 100, written like 11 or 11.5.',
-  fee: 'The delivery fee has to be an amount of zero or more, written like 3 or 3.50.',
+  fee: 'Every delivery fee has to be an amount of zero or more, written like 3 or 3.50.',
   name: 'The shop needs a name.',
   not_configured: 'This store has not been seeded yet, so there is nothing to edit.',
   stored: 'The stored settings are invalid in a way this form cannot fix. Check the seed.',
@@ -61,7 +74,10 @@ export default async function AdminSettingsPage({ searchParams }: PageProps) {
    * they have to fix is the only one they touch.
    */
   const stored = toForm(settings.value);
-  const value = (name: keyof StoreSettingsForm): string => one(query[name]) ?? stored[name];
+  const value = (name: Exclude<keyof StoreSettingsForm, 'deliveryFees'>): string =>
+    one(query[name]) ?? stored[name];
+  const fee = (region: Region): string =>
+    one(query[`deliveryFee.${region}`]) ?? stored.deliveryFees[region];
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-12">
@@ -81,7 +97,7 @@ export default async function AdminSettingsPage({ searchParams }: PageProps) {
           role="alert"
           className="rounded-[var(--radius-panel)] border border-negative/60 bg-surface p-4 text-sm text-negative"
         >
-          {MESSAGES[error] ?? 'That could not be saved.'}
+          {MESSAGES[error.split('.')[0] ?? error] ?? 'That could not be saved.'}
         </p>
       )}
 
@@ -169,24 +185,45 @@ export default async function AdminSettingsPage({ searchParams }: PageProps) {
               className={input}
             />
           </Field>
+        </fieldset>
 
-          <Field
-            id="deliveryFee"
-            label="Delivery fee (USD)"
-            hint="Flat, on every order. Zero is free delivery. Orders already placed keep the fee they were quoted."
-            invalid={error === 'fee'}
-          >
-            <input
-              id="deliveryFee"
-              name="deliveryFee"
-              required
-              inputMode="decimal"
-              defaultValue={value('deliveryFee')}
-              aria-invalid={error === 'fee'}
-              aria-describedby="deliveryFee-hint"
-              className={input}
-            />
-          </Field>
+        <fieldset className="flex flex-col gap-5 border-0 p-0">
+          <legend className="pb-1 text-lg font-semibold text-ink">Delivery, by governorate</legend>
+
+          <p className="text-sm text-muted">
+            Every governorate is priced. Zero is free delivery. Orders already placed keep the fee
+            they were quoted — changing a price here never changes what somebody has been told.
+          </p>
+
+          {/*
+            Eight boxes rather than one plus overrides. A default that applies
+            "unless" is a second answer to what delivery to Akkar costs, and that
+            is how a checkout quotes one number and an order charges another.
+          */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {REGIONS.map((region) => (
+              <Field
+                key={region}
+                id={`deliveryFee.${region}`}
+                label={`${REGION_LABELS[region]} (USD)`}
+                hint={error === `fee.${region}` ? 'This one could not be read.' : ''}
+                invalid={error === `fee.${region}`}
+              >
+                <input
+                  id={`deliveryFee.${region}`}
+                  name={`deliveryFee.${region}`}
+                  required
+                  inputMode="decimal"
+                  defaultValue={fee(region)}
+                  aria-invalid={error === `fee.${region}`}
+                  aria-describedby={
+                    error === `fee.${region}` ? `deliveryFee.${region}-hint` : undefined
+                  }
+                  className={input}
+                />
+              </Field>
+            ))}
+          </div>
         </fieldset>
 
         <button
@@ -261,9 +298,11 @@ const Field = ({
       {label}
     </label>
     {children}
-    <p id={`${id}-hint`} className={`text-xs ${invalid ? 'text-negative' : 'text-faint'}`}>
-      {hint}
-    </p>
+    {hint.length > 0 && (
+      <p id={`${id}-hint`} className={`text-xs ${invalid ? 'text-negative' : 'text-faint'}`}>
+        {hint}
+      </p>
+    )}
   </div>
 );
 

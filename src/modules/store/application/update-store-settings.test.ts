@@ -1,3 +1,4 @@
+import { sameEverywhere } from '@platform/regions';
 import { describe, expect, it, vi } from 'vitest';
 import type { StoreSettingsRepository } from '../contracts';
 import type { StoreSettings } from '../domain/store-settings';
@@ -12,7 +13,7 @@ const stored = (overrides: Partial<StoreSettings> = {}): StoreSettings => ({
   contactPhone: '+96170000000',
   vatBasisPoints: 1100,
   commercialRegistryNumber: null,
-  deliveryFeeCents: 0,
+  deliveryFees: sameEverywhere(0),
   ...overrides,
 });
 
@@ -21,7 +22,7 @@ const form = (overrides: Partial<StoreSettingsForm> = {}): StoreSettingsForm => 
   contactPhone: '70 000 000',
   commercialRegistryNumber: '',
   vatPercent: '11',
-  deliveryFee: '0',
+  deliveryFees: sameEverywhere('0'),
   ...overrides,
 });
 
@@ -188,47 +189,81 @@ describe('the VAT rate', () => {
   });
 });
 
-describe('the delivery fee', () => {
-  it('reads an amount as cents', async () => {
+describe('the delivery table', () => {
+  it('reads an amount as cents, for every governorate', async () => {
     const h = harness();
-    await h.run(form({ deliveryFee: '3.50' }));
+    await h.run(form({ deliveryFees: sameEverywhere('3.50') }));
 
-    expect(h.written()?.deliveryFeeCents).toBe(350);
+    expect(h.written()?.deliveryFees.beirut).toBe(350);
+    expect(h.written()?.deliveryFees.nabatieh).toBe(350);
+  });
+
+  it('prices each governorate separately', async () => {
+    // The whole point of the change: Beirut is not Akkar.
+    const h = harness();
+    await h.run(
+      form({ deliveryFees: { ...sameEverywhere('3.00'), beirut: '2.00', akkar: '8.00' } }),
+    );
+
+    expect(h.written()?.deliveryFees).toMatchObject({
+      beirut: 200,
+      akkar: 800,
+      south: 300,
+    });
   });
 
   it('accepts an amount written with a dollar sign', async () => {
     const h = harness();
-    await h.run(form({ deliveryFee: '$3.50' }));
+    await h.run(form({ deliveryFees: sameEverywhere('$3.50') }));
 
-    expect(h.written()?.deliveryFeeCents).toBe(350);
+    expect(h.written()?.deliveryFees.bekaa).toBe(350);
   });
 
-  it('accepts zero, which is free delivery and the default', async () => {
-    const h = harness({ ...stored(), deliveryFeeCents: 500 });
-    const result = await h.run(form({ deliveryFee: '0' }));
+  it('accepts zero, which is free delivery', async () => {
+    const h = harness(stored({ deliveryFees: sameEverywhere(500) }));
+    const result = await h.run(form({ deliveryFees: sameEverywhere('0') }));
 
     expect(result.ok).toBe(true);
-    expect(h.written()?.deliveryFeeCents).toBe(0);
+    expect(h.written()?.deliveryFees.north).toBe(0);
   });
 
-  it('refuses an amount it cannot read', async () => {
+  it('refuses an amount it cannot read, and says WHICH governorate', async () => {
+    // "The delivery fee could not be read" on a screen with eight of them is a
+    // message that sends the operator hunting.
     const h = harness();
-    expect(await h.run(form({ deliveryFee: 'free' }))).toEqual({
+    const result = await h.run(
+      form({ deliveryFees: { ...sameEverywhere('3.00'), baalbek_hermel: 'free' } }),
+    );
+
+    expect(result).toEqual({
       ok: false,
-      error: { tag: 'delivery_fee_unparsable', input: 'free' },
+      error: { tag: 'delivery_fee_unparsable', region: 'baalbek_hermel', input: 'free' },
     });
+    expect(h.save).not.toHaveBeenCalled();
   });
 
   it('refuses a negative fee', async () => {
     // A negative delivery fee is a discount nobody asked for, applied to every
-    // order in the shop.
+    // order going to that governorate.
     const h = harness();
-    const result = await h.run(form({ deliveryFee: '-2.00' }));
+    const result = await h.run(form({ deliveryFees: { ...sameEverywhere('0'), akkar: '-2.00' } }));
 
     expect(result).toEqual({
       ok: false,
-      error: { tag: 'invalid', reason: { tag: 'delivery_fee_invalid', deliveryFeeCents: -200 } },
+      error: {
+        tag: 'invalid',
+        reason: { tag: 'delivery_fee_invalid', region: 'akkar', deliveryFeeCents: -200 },
+      },
     });
+    expect(h.save).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing when one governorate out of eight is wrong', async () => {
+    // All or nothing. Saving seven prices and refusing the eighth would leave the
+    // shop charging a mixture of what the operator meant and what it used to be.
+    const h = harness(stored({ deliveryFees: sameEverywhere(100) }));
+    await h.run(form({ deliveryFees: { ...sameEverywhere('9.99'), south: 'nope' } }));
+
     expect(h.save).not.toHaveBeenCalled();
   });
 });
@@ -269,23 +304,30 @@ describe('the name', () => {
 });
 
 describe('rendering the stored settings back into the form', () => {
-  it('shows a rate and a fee with two decimals', async () => {
-    expect(toForm(stored({ vatBasisPoints: 1100, deliveryFeeCents: 350 }))).toMatchObject({
-      vatPercent: '11.00',
-      deliveryFee: '3.50',
-    });
+  it('shows a rate and every fee with two decimals', async () => {
+    const rendered = toForm(
+      stored({ vatBasisPoints: 1100, deliveryFees: { ...sameEverywhere(350), beirut: 200 } }),
+    );
+
+    expect(rendered.vatPercent).toBe('11.00');
+    expect(rendered.deliveryFees.beirut).toBe('2.00');
+    expect(rendered.deliveryFees.akkar).toBe('3.50');
   });
 
   it('round-trips: what it renders is what the parser reads back', async () => {
     // The property that matters. A form that renders "11" and parses "1100" is
     // fine; one that renders a value it cannot read is a screen that refuses to
     // save until the operator edits a field they never meant to touch.
-    const original = stored({ vatBasisPoints: 1115, deliveryFeeCents: 275 });
+    const original = stored({
+      vatBasisPoints: 1115,
+      deliveryFees: { ...sameEverywhere(275), beirut: 0, akkar: 1250 },
+    });
     const h = harness(original);
 
     await h.run({ ...toForm(original) });
 
-    expect(h.written()).toMatchObject({ vatBasisPoints: 1115, deliveryFeeCents: 275 });
+    expect(h.written()).toMatchObject({ vatBasisPoints: 1115 });
+    expect(h.written()?.deliveryFees).toEqual(original.deliveryFees);
   });
 
   it('renders an absent registry number as an empty field', async () => {

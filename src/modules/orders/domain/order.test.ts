@@ -5,7 +5,6 @@ import {
   canTransition,
   createOrder,
   holdsStock,
-  isRegion,
   MAX_CITY,
   MAX_LINES,
   MAX_NAME,
@@ -293,19 +292,5 @@ describe('reading an order', () => {
       lines: [line({ sku: 'A', quantity: 2 }), line({ sku: 'B', quantity: 3 })],
     });
     expect(totalItems(result)).toBe(5);
-  });
-});
-
-describe('isRegion', () => {
-  it("accepts each of Lebanon's governorates", () => {
-    expect(isRegion('beirut')).toBe(true);
-    expect(isRegion('baalbek_hermel')).toBe(true);
-  });
-
-  it('refuses anything else', () => {
-    // A closed list rather than free text: "Mount Lebanon" typed four ways is
-    // four regions to anyone counting deliveries.
-    expect(isRegion('Mount Lebanon')).toBe(false);
-    expect(isRegion('')).toBe(false);
   });
 });
