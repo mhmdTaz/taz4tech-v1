@@ -2,8 +2,16 @@ import { expect, test } from '@playwright/test';
 
 /** The demo catalogue: Lenovo IdeaPad 3, Samsung Galaxy A55, Anker cable, plus a draft. */
 
+/**
+ * A product CARD, not just any link to a product.
+ *
+ * Every tile now holds two anchors pointing at the same product page: the card
+ * itself, and the quick-view trigger overlaid on it — which is a link so that it
+ * still goes somewhere useful before hydration. Counting anchors would count
+ * every product twice. The card is the one that contains the title heading.
+ */
 const tiles = (page: import('@playwright/test').Page) =>
-  page.locator('main ul li a[href*="/products/"]');
+  page.locator('main ul li a[href*="/products/"]').filter({ has: page.locator('h3') });
 
 /**
  * A PRODUCT tile, not a facet link.

@@ -5,6 +5,7 @@ import {
   isOnOffer,
   priceRange,
   productPath,
+  toQuickView,
 } from '@modules/catalog';
 import type { Locale } from '@platform/locale';
 import { textFor } from '@platform/locale';
@@ -16,6 +17,7 @@ import { Badge, ProductCard } from '@ui/primitives/product-card';
 import { connection } from 'next/server';
 import { getTranslations } from 'next-intl/server';
 import { getContainer } from '@/composition';
+import { QuickViewProvider, QuickViewTrigger } from './quick-view';
 import {
   hasActiveFilters,
   parseListingParams,
@@ -154,48 +156,77 @@ export const ProductGrid = async ({
                 {t('resultCount', { count: page.value.products.length })}
               </p>
 
-              <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                {page.value.products.map((product) => {
-                  const cheapest = defaultVariant(product);
-                  const onOffer = isOnOffer(cheapest, now);
-                  const image = product.media.find((item) => item.kind === 'image');
+              {/*
+                The quick-view data is built HERE, from products already loaded
+                to render the tiles, and shipped with the page. Fetching it when
+                a dialog opens would add a round trip to the one interaction
+                whose whole point is not having to wait for one.
+              */}
+              <QuickViewProvider
+                locale={locale}
+                views={page.value.products.map((product) => toQuickView(product, { locale, now }))}
+                labels={{
+                  quickView: t('quickView'),
+                  quickViewOf: t.raw('quickViewOf'),
+                  close: t('close'),
+                  fullDetails: t('fullDetails'),
+                  hint: t('quickViewHint'),
+                  priceWas: t('priceWas'),
+                  priceNow: t('priceNow'),
+                  offerEnds: t.raw('offerEnds'),
+                  chooseOption: t.raw('chooseOption'),
+                  sku: t('sku'),
+                }}
+              >
+                <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                  {page.value.products.map((product) => {
+                    const cheapest = defaultVariant(product);
+                    const onOffer = isOnOffer(cheapest, now);
+                    const image = product.media.find((item) => item.kind === 'image');
 
-                  return (
-                    <li key={product.id}>
-                      <ProductCard
-                        href={productPath(locale, product.slug)}
-                        title={textFor(product.title, locale)}
-                        brand={product.brand}
-                        image={
-                          image === undefined
-                            ? null
-                            : { src: image.url, alt: textFor(image.alt, locale) }
-                        }
-                        badge={onOffer ? <Badge tone="caution">{t('sale')}</Badge> : undefined}
-                        price={
-                          hasPriceRange(product) ? (
-                            <PriceFrom
-                              size="sm"
-                              label={t('priceFrom', {
-                                price: format(priceRange(product).from, locale),
-                              })}
+                    return (
+                      <li key={product.id}>
+                        <ProductCard
+                          href={productPath(locale, product.slug)}
+                          title={textFor(product.title, locale)}
+                          brand={product.brand}
+                          image={
+                            image === undefined
+                              ? null
+                              : { src: image.url, alt: textFor(image.alt, locale) }
+                          }
+                          badge={onOffer ? <Badge tone="caution">{t('sale')}</Badge> : undefined}
+                          action={
+                            <QuickViewTrigger
+                              slug={product.slug}
+                              href={productPath(locale, product.slug)}
                             />
-                          ) : (
-                            <Price
-                              size="sm"
-                              locale={locale}
-                              amount={cheapest.price}
-                              compareAt={onOffer ? cheapest.compareAtPrice : null}
-                              labelWas={t('priceWas')}
-                              labelNow={t('priceNow')}
-                            />
-                          )
-                        }
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
+                          }
+                          price={
+                            hasPriceRange(product) ? (
+                              <PriceFrom
+                                size="sm"
+                                label={t('priceFrom', {
+                                  price: format(priceRange(product).from, locale),
+                                })}
+                              />
+                            ) : (
+                              <Price
+                                size="sm"
+                                locale={locale}
+                                amount={cheapest.price}
+                                compareAt={onOffer ? cheapest.compareAtPrice : null}
+                                labelWas={t('priceWas')}
+                                labelNow={t('priceNow')}
+                              />
+                            )
+                          }
+                        />
+                      </li>
+                    );
+                  })}
+                </ul>
+              </QuickViewProvider>
 
               {page.value.nextCursor !== null && (
                 <nav className="flex justify-center" aria-label={t('pagination')}>

@@ -5,8 +5,16 @@ import { expect, test } from '@playwright/test';
  * under $500 plus a pinned laptop), and "staff-picks" (a draft).
  */
 
+/**
+ * A product CARD, not just any link to a product.
+ *
+ * Every tile now holds two anchors pointing at the same product page: the card
+ * itself, and the quick-view trigger overlaid on it — which is a link so that it
+ * still goes somewhere useful before hydration. Counting anchors would count
+ * every product twice. The card is the one that contains the title heading.
+ */
 const tiles = (page: import('@playwright/test').Page) =>
-  page.locator('main ul li a[href*="/products/"]');
+  page.locator('main ul li a[href*="/products/"]').filter({ has: page.locator('h3') });
 
 const productTile = (page: import('@playwright/test').Page, name: RegExp) =>
   tiles(page).filter({ hasText: name });

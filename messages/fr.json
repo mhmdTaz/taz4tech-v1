@@ -44,7 +44,12 @@
     "searchSubmit": "Rechercher",
     "noMatches": "Aucun résultat pour ces filtres. Essayez de les élargir.",
     "resultCount": "{count, plural, =0 {Aucun produit} one {# produit} other {# produits}}",
-    "selected": "sélectionné"
+    "selected": "sélectionné",
+    "quickView": "Aperçu rapide",
+    "quickViewOf": "Aperçu rapide : {title}",
+    "close": "Fermer",
+    "fullDetails": "Voir la fiche complète",
+    "quickViewHint": "Un résumé. La fiche complète contient les caractéristiques et toutes les photos."
   },
   "collections": {
     "title": "Collections",

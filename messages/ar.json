@@ -44,7 +44,12 @@
     "searchSubmit": "بحث",
     "noMatches": "لا توجد نتائج مطابقة. جرّب توسيع نطاق البحث.",
     "resultCount": "{count, plural, =0 {لا توجد منتجات} one {منتج واحد} two {منتجان} few {# منتجات} many {# منتجًا} other {# منتج}}",
-    "selected": "محدد"
+    "selected": "محدد",
+    "quickView": "عرض سريع",
+    "quickViewOf": "عرض سريع: {title}",
+    "close": "إغلاق",
+    "fullDetails": "عرض التفاصيل الكاملة",
+    "quickViewHint": "ملخّص. الصفحة الكاملة تحتوي على المواصفات وجميع الصور."
   },
   "collections": {
     "title": "المجموعات",
