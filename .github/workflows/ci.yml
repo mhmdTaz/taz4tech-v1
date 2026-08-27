@@ -154,7 +154,10 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Seed the store
-        run: pnpm seed
+        # --reset, explicitly: the plain command creates settings and then leaves
+        # them alone, which is right for a real shop and wrong for a suite that
+        # asserts on seeded values.
+        run: pnpm seed --reset
 
       - name: Seed the demo catalogue
         # Fixtures, never run against Atlas — the listing and product pages need
@@ -205,7 +208,10 @@ jobs:
         run: pnpm build
 
       - name: Seed the store
-        run: pnpm seed
+        # --reset, explicitly: the plain command creates settings and then leaves
+        # them alone, which is right for a real shop and wrong for a suite that
+        # asserts on seeded values.
+        run: pnpm seed --reset
 
       - name: Seed the demo catalogue
         # Fixtures, never run against Atlas — the listing and product pages need

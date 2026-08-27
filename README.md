@@ -13,7 +13,7 @@ migration.
 ```bash
 pnpm install
 cp .env.example .env.local     # fill in MONGODB_URI
-pnpm seed                      # creates the store settings document
+pnpm seed                      # creates the store settings document, once
 pnpm dev
 ```
 
@@ -113,7 +113,8 @@ through `parseFloat`, which would turn `"1.115"` into 111 cents instead of 112.
 | `pnpm test:integration` | Against a real MongoDB (see below) |
 | `pnpm test:e2e` | Playwright, all locales, axe included |
 | `pnpm bundle:budget` | Fails if client JS crosses its ceiling |
-| `pnpm seed` | Writes the store settings document |
+| `pnpm seed` | Creates the store settings document if there is none, and otherwise leaves it alone |
+| `pnpm seed --reset` | Overwrites it with the defaults. Test databases only — it discards anything edited in the admin |
 | `pnpm seed:demo` | Loads demo products (fixtures, never for Atlas) |
 | `pnpm import:catalogue <file.xlsx>` | Dry-run a catalogue import; add `--commit` to apply |
 
@@ -518,6 +519,35 @@ client-supplied and an attacker with many addresses defeats the first limit. The
 global limit means a determined attacker can lock the operator out for fifteen
 minutes — a denial of service accepted deliberately, in exchange for the password
 not being guessable.
+
+## Seeding
+
+```bash
+pnpm seed             # creates the settings document, or leaves the existing one alone
+pnpm seed --reset     # overwrites it — test databases only
+```
+
+**`pnpm seed` is create-only, and that is deliberate.** The shop's name, its
+phone number, the VAT rate and the eight delivery prices are edited by an
+operator in the admin. They get set once, quietly, and then relied on. A seeder
+that rewrote them from constants in a file would turn *run the seed again* —
+something anyone would do to a database that looks empty, or that a deploy
+runbook might do on every release — into *undo everything anyone configured*,
+with no error and a cheerful success message.
+
+So the values in `scripts/seed.ts` are what a store **starts** with, not what it
+is kept at. Delivery is free everywhere until somebody prices it, because a
+made-up price is charged to a real customer at their door.
+
+Overwriting is still possible and still needed: a test database has to be put
+back to a known state. That is `--reset`, asked for by name, and it prints which
+database it is about to overwrite — the sentence somebody needs to read when they
+typed it in the wrong terminal. CI uses it explicitly rather than relying on the
+database being fresh.
+
+The decision lives in `ensureStoreSettings`, not in the script, so "does this
+already exist" is unit-tested rather than trusted. `saveStoreSettings` is the
+separate door that overwrites, and nothing reaches it by accident.
 
 ## Store settings
 

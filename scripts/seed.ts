@@ -1,10 +1,26 @@
 /**
- * Seed the store's settings document.
+ * Bring a store into existence.
  *
- * Idempotent: safe to run against a database that already has one. Used by CI
- * before the e2e and Lighthouse jobs, and once by hand against Atlas.
+ *   pnpm seed             creates the settings document if there is none, and
+ *                         otherwise leaves it exactly as it is
+ *   pnpm seed --reset     overwrites it with the defaults below
  *
- *   pnpm seed
+ * THE DEFAULT IS CREATE-ONLY, AND THAT IS THE POINT
+ * -------------------------------------------------
+ * The shop's name, its phone number, the VAT rate and the eight delivery prices
+ * are edited by an operator in the admin. A seeder that rewrote them from
+ * constants in this file would turn "run the seed again" — something anyone
+ * would do to a database that looks empty, or that a deploy runbook might do on
+ * every release — into "undo everything anyone configured", silently and with a
+ * cheerful success message.
+ *
+ * So the values below are what a store STARTS with, not what it is kept at.
+ * Delivery is free everywhere until somebody prices it, because a made-up price
+ * is charged to a real customer at their door.
+ *
+ * `--reset` exists for test databases, which have to be put back to a known
+ * state. It names the database it overwrote, because that is the sentence
+ * somebody needs to read when they typed it in the wrong terminal.
  *
  * Note it goes through the module barrel and the composition root, exactly like
  * the app does. A seeder that talks to the collection directly is a seeder that
@@ -13,14 +29,24 @@
 
 import { sameEverywhere } from '@platform/regions';
 import { getContainer } from '../src/composition/index.js';
+import type { StoreSettings } from '../src/modules/store/index.js';
 import { closeMongo } from '../src/platform/mongo/index.js';
 
+const RESET_FLAG = '--reset';
+
+const rejected = (error: unknown): void => {
+  console.error('Seed rejected by the domain:', JSON.stringify(error, null, 2));
+  process.exitCode = 1;
+};
+
 const main = async (): Promise<void> => {
+  const reset = process.argv.slice(2).includes(RESET_FLAG);
   const container = await getContainer();
+  const database = container.config.mongo.database;
 
   await container.store.ensureIndexes();
 
-  const result = await container.store.saveStoreSettings({
+  const defaults: StoreSettings = {
     storeId: container.config.storeId,
     name: 'Taz4Tech',
     defaultLocale: 'en',
@@ -33,26 +59,42 @@ const main = async (): Promise<void> => {
     // Law 81/2018 Art. 31. Null until the business is registered; the storefront
     // hides the line rather than printing an empty label.
     commercialRegistryNumber: null,
-    // Free to every governorate to start. The table is complete rather than a
-    // default plus overrides, so there is exactly one answer to what delivery
-    // costs anywhere — and real prices go in through the settings screen.
+    // Free to every governorate to start. Real prices are set in the admin, from
+    // deliveries that have actually happened — and once set, this script leaves
+    // them alone.
     deliveryFees: sameEverywhere(0),
-  });
+  };
 
-  if (!result.ok) {
-    console.error('Seed rejected by the domain:', JSON.stringify(result.error, null, 2));
-    process.exitCode = 1;
+  if (reset) {
+    console.warn(`Overwriting store settings in database "${database}".`);
+
+    const result = await container.store.saveStoreSettings(defaults);
+    if (!result.ok) return rejected(result.error);
+
+    console.warn(`Reset store "${result.value.storeId}" in database "${database}".`);
+    return;
+  }
+
+  const result = await container.store.ensureStoreSettings(defaults);
+  if (!result.ok) return rejected(result.error);
+
+  if (result.value.tag === 'created') {
+    console.warn(`Created store "${result.value.settings.storeId}" in database "${database}".`);
     return;
   }
 
   console.warn(
-    `Seeded store "${result.value.storeId}" in database "${container.config.mongo.database}".`,
+    `Store "${result.value.settings.storeId}" already has settings in database "${database}" — left untouched.\n` +
+      `Edit them at /admin/settings. To replace them from this script: pnpm seed ${RESET_FLAG}`,
   );
 };
 
 main()
   .catch((error: unknown) => {
+    // A malformed or invariant-violating document makes the READ throw, and
+    // leaving it alone cannot repair that. Say which flag can.
     console.error('Seed failed:', error);
+    console.error(`If the stored settings are broken, "pnpm seed ${RESET_FLAG}" replaces them.`);
     process.exitCode = 1;
   })
   .finally(() => closeMongo());
