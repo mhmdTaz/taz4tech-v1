@@ -10,6 +10,12 @@ import { defineConfig, devices } from '@playwright/test';
 const PORT = 3000;
 const baseURL = `http://127.0.0.1:${PORT}`;
 
+/**
+ * Test-only admin password, exported so the specs use the same literal the
+ * server was started with rather than a copy that can drift out of step.
+ */
+export const ADMIN_PASSWORD = 'e2e-admin-password';
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -56,6 +62,11 @@ export default defineConfig({
       MONGODB_DB: process.env.MONGODB_DB ?? 'taz4tech_e2e',
       STORE_ID: process.env.STORE_ID ?? 'taz4tech',
       SITE_URL: baseURL,
+      // The admin area only exists when both are set, which is what the admin
+      // specs need. A throwaway pair — never the values used anywhere real.
+      ADMIN_PASSWORD: ADMIN_PASSWORD,
+      ADMIN_SESSION_SECRET: 'e2e-session-secret-that-is-long-enough-0123456789',
+      TAZ_FLAG_EXCEL_IMPORTER: 'on',
     },
   },
 });

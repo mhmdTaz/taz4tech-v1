@@ -92,6 +92,63 @@ describe('parseConfig', () => {
   });
 });
 
+describe('admin credentials', () => {
+  const PASSWORD = 'a-long-enough-password';
+  const SECRET = 'x'.repeat(32);
+
+  it('leaves the admin area disabled when neither is set', () => {
+    // The safe default, and the one a fresh deploy gets. Disabled means the
+    // routes 404 — not that they exist without a password.
+    expect(parseConfig(valid).admin).toBeNull();
+  });
+
+  it('enables the admin area when both are set', () => {
+    const config = parseConfig({
+      ...valid,
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
+    expect(config.admin).toEqual({ password: PASSWORD, sessionSecret: SECRET });
+  });
+
+  it.each([
+    ['password without secret', { ADMIN_PASSWORD: PASSWORD }],
+    ['secret without password', { ADMIN_SESSION_SECRET: SECRET }],
+  ])('refuses to boot with a %s', (_label, partial) => {
+    // Not "admin off" — that would silently ignore a password the operator
+    // believes is protecting the site.
+    expect(() => parseConfig({ ...valid, ...partial })).toThrow(ConfigError);
+  });
+
+  it.each([
+    ['both blank', { ADMIN_PASSWORD: '', ADMIN_SESSION_SECRET: '' }],
+    ['blank and whitespace', { ADMIN_PASSWORD: '   ', ADMIN_SESSION_SECRET: '' }],
+  ])('treats %s as no admin area rather than as a boot failure', (_label, partial) => {
+    // Render writes an empty string for a sync:false variable nobody has filled
+    // in. Blank must mean absent, or declaring these in render.yaml would stop
+    // the storefront from starting until a password was typed.
+    expect(parseConfig({ ...valid, ...partial }).admin).toBeNull();
+  });
+
+  it('still refuses a blank password beside a real secret', () => {
+    expect(() =>
+      parseConfig({ ...valid, ADMIN_PASSWORD: '', ADMIN_SESSION_SECRET: SECRET }),
+    ).toThrow(ConfigError);
+  });
+
+  it('rejects a session secret short enough to be brute-forced', () => {
+    expect(() =>
+      parseConfig({ ...valid, ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: 'too-short' }),
+    ).toThrow(/ADMIN_SESSION_SECRET/);
+  });
+
+  it('rejects a password short enough to be guessed', () => {
+    expect(() =>
+      parseConfig({ ...valid, ADMIN_PASSWORD: 'short', ADMIN_SESSION_SECRET: SECRET }),
+    ).toThrow(/ADMIN_PASSWORD/);
+  });
+});
+
 describe('getConfig', () => {
   afterEach(() => {
     resetConfig();

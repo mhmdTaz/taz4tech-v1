@@ -293,7 +293,41 @@ Relevance ranking is **not** implemented — results are newest-first, cursor
 paginated like the rest of the listing. Recall matters more than ordering at this
 catalogue size, and one pagination model is worth keeping.
 
+## The admin area
+
+```
+/admin/import
+```
+
+**It exists only when it is configured.** `ADMIN_PASSWORD` and
+`ADMIN_SESSION_SECRET` are set together or not at all: unset, every `/admin` URL
+is a 404 and there is no write surface on the internet. Set only one and the app
+refuses to boot — treating that as "admin off" would silently ignore a password
+the operator believes is protecting the site, and treating it as "admin on"
+would run the session signer with no secret.
+
+**One operator, one password, one signed cookie.** There are no user accounts to
+model yet, and a users collection built before knowing who else will ever log in
+is the wrong shape guessed early. Sessions are HMAC-signed tokens rather than
+rows in a table: with one operator, revocation means rotating
+`ADMIN_SESSION_SECRET`, which invalidates every outstanding token at once.
+
+**The check lives on the page and on the action, never only in a layout or in
+middleware.** A layout is not a security boundary — client-side navigation can
+render a page without re-running it, and a Server Action is invoked by URL with
+no page render at all. Middleware is not one either; CVE-2025-29927 was a header
+that made Next skip it entirely. `requireAdmin()` sits where nothing in the
+framework's routing can route around it.
+
+Login is throttled per address **and** globally, because `X-Forwarded-For` is
+client-supplied and an attacker with many addresses defeats the first limit. The
+global limit means a determined attacker can lock the operator out for fifteen
+minutes — a denial of service accepted deliberately, in exchange for the password
+not being guessable.
+
 ## The Excel importer
+
+The admin screen at `/admin/import`, and the same thing from a terminal:
 
 ```bash
 pnpm import:catalogue catalogue.xlsx            # dry run — prints the plan, writes nothing
@@ -325,7 +359,27 @@ three hundred and ninety-seven, with the three reported by Excel row number.
 
 Column detection is a starting point the operator confirms, and it resolves
 specific headers before general ones — "Compare at price" claims its column
-before "Price" does, or every Shopify export would sell at the was-price.
+before "Price" does, or every Shopify export would sell at the was-price. On the
+admin screen the mapping is editable, and each field shows real values from the
+sheet beside it so the right column can be recognised rather than guessed. A
+mapping the server cannot parse is **refused**, never quietly re-detected:
+falling back would import with a mapping the operator did not choose, which is
+exactly how a "Cost" column ends up loaded as the selling price.
+
+**A SKU already owned by another product is caught in the plan.** Rename a
+product and keep its SKU: the slug changes, so the sheet reads as a create, while
+the SKU still belongs to the product under the old slug. That used to reach the
+unique index and fail as `E11000` *halfway through the write*, leaving a
+partly-imported catalogue behind a 500. The plan now looks the SKUs up in bulk
+alongside the slugs and reports the conflict with the product that owns it.
+
+`save()` returns a `Result` rather than throwing on a uniqueness conflict, so
+even a genuine race — someone else taking a SKU between the preview and the
+write — costs one product and a line in the receipt, not the whole import. The
+translation from Mongo's error code happens in the repository, because nothing
+above it should know what 11000 means. Anything that is not a uniqueness
+conflict still throws: a dropped connection must never be reported as
+"397 of 400 imported".
 
 ## Open decisions
 

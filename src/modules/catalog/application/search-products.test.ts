@@ -16,6 +16,7 @@ const repository = () => {
     findById: vi.fn(),
     findBySku: vi.fn(),
     findBySlugs: vi.fn(),
+    findBySkus: vi.fn(async () => []),
     list: vi.fn(),
     save: vi.fn(),
     search: vi.fn(async (query: SearchProductsQuery) => {
@@ -214,6 +215,7 @@ describe('searchProducts', () => {
       findById: vi.fn(),
       findBySku: vi.fn(),
       findBySlugs: vi.fn(),
+      findBySkus: vi.fn(async () => []),
       list: vi.fn(),
       save: vi.fn(),
       search: vi.fn().mockRejectedValue(new Error('connection refused')),

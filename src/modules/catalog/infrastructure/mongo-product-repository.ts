@@ -17,6 +17,7 @@
 
 import type { LocalizedText } from '@platform/locale';
 import { fromCents } from '@platform/money';
+import { err, ok } from '@platform/result';
 import type { Collection, Db } from 'mongodb';
 import { z } from 'zod';
 import type {
@@ -27,6 +28,7 @@ import type {
   ProductFilters,
   ProductPage,
   ProductRepository,
+  SaveConflict,
   SearchProductsQuery,
   SearchResult,
 } from '../contracts';
@@ -384,6 +386,33 @@ const readFacets = (
   };
 };
 
+/** Mongo's code for "a unique index refused this". */
+const DUPLICATE_KEY = 11000;
+
+/**
+ * Read a driver error as a uniqueness conflict, or null if it is something else.
+ *
+ * The index NAME is not used to decide which conflict it is — keyValue is,
+ * because it names the field that actually collided. Matching on the index name
+ * would silently stop working the day an index is renamed, and it would report
+ * the wrong field for a compound index that grows a column.
+ */
+const asDuplicateKey = (error: unknown): SaveConflict | null => {
+  if (typeof error !== 'object' || error === null) return null;
+  const candidate = error as { code?: unknown; keyValue?: Record<string, unknown> };
+  if (candidate.code !== DUPLICATE_KEY) return null;
+
+  const sku = candidate.keyValue?.['variants.sku'];
+  if (typeof sku === 'string') return { tag: 'sku_taken', sku };
+
+  const slug = candidate.keyValue?.slug;
+  if (typeof slug === 'string') return { tag: 'slug_taken', slug };
+
+  // A duplicate key on an index we do not know about is not something to
+  // swallow: it means an index exists that this code has no story for.
+  return null;
+};
+
 export const createMongoProductRepository = (db: Db): ProductRepository => {
   const collection: Collection<ProductDocumentShape> = db.collection(PRODUCTS_COLLECTION);
 
@@ -401,6 +430,13 @@ export const createMongoProductRepository = (db: Db): ProductRepository => {
     async findBySku(storeId, sku) {
       const doc = await collection.findOne({ storeId, 'variants.sku': sku });
       return doc === null ? null : toDomain(doc, `${storeId}/sku:${sku}`);
+    },
+
+    async findBySkus(storeId, skus) {
+      if (skus.length === 0) return [];
+      // Served by storeId_sku_unique; the integration test asserts on the plan.
+      const docs = await collection.find({ storeId, 'variants.sku': { $in: [...skus] } }).toArray();
+      return docs.map((doc) => toDomain(doc, `${storeId}/${doc.slug}`));
     },
 
     async findBySlugs(storeId, slugs) {
@@ -506,9 +542,26 @@ export const createMongoProductRepository = (db: Db): ProductRepository => {
 
     async save(product) {
       const document = toDocument(product);
-      await collection.replaceOne({ _id: document._id, storeId: document.storeId }, document, {
-        upsert: true,
-      });
+      try {
+        await collection.replaceOne({ _id: document._id, storeId: document.storeId }, document, {
+          upsert: true,
+        });
+        return ok(undefined);
+      } catch (error) {
+        /*
+         * Translating a driver error into a domain-shaped one is exactly this
+         * layer's job. Above here nothing knows what 11000 means, and nothing
+         * should — an application layer that reads Mongo error codes is coupled
+         * to Mongo through the back door.
+         *
+         * Anything that is NOT a uniqueness conflict is rethrown. A dropped
+         * connection is not an expected outcome of importing a spreadsheet, and
+         * swallowing it would report a successful import that wrote nothing.
+         */
+        const conflict = asDuplicateKey(error);
+        if (conflict === null) throw error;
+        return err(conflict);
+      }
     },
   };
 };

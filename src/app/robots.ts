@@ -4,7 +4,13 @@ import type { MetadataRoute } from 'next';
 /**
  * robots.txt
  *
- * Everything is crawlable except the API surface and the variant query strings.
+ * Everything is crawlable except the API surface, the admin area and the variant
+ * query strings.
+ *
+ * The /admin disallow is a crawl-budget instruction, not a security control — a
+ * robots.txt entry advertises a path as much as it hides it. Access is enforced
+ * by the session check on every admin page and action; the admin layout also
+ * sends `noindex` for a crawler that fetches anyway.
  *
  * The `?variant=` disallow matters: every option combination is a distinct URL
  * by design (so it can be shared and works without JavaScript), but they all
@@ -20,7 +26,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/api/', '/*?variant='],
+        disallow: ['/api/', '/admin', '/*?variant='],
       },
     ],
     sitemap: `${siteUrl}/sitemap.xml`,

@@ -1,7 +1,7 @@
 import type { EntityId } from '@platform/ids';
 import { englishOnly } from '@platform/locale';
 import { fromCents } from '@platform/money';
-import { unwrapOrThrow } from '@platform/result';
+import { err, ok, unwrapOrThrow } from '@platform/result';
 import { describe, expect, it, vi } from 'vitest';
 import type { ProductRepository, WorkbookReader } from '../contracts';
 import type { Product } from '../domain/product';
@@ -33,9 +33,14 @@ const repository = (existing: Product[] = []) => {
     findBySlugs: vi.fn(async (_storeId: string, slugs: readonly string[]) =>
       existing.filter((product) => slugs.includes(product.slug)),
     ),
+    // Mirrors the unique index: a SKU belongs to exactly one product per store.
+    findBySkus: vi.fn(async (_storeId: string, skus: readonly string[]) =>
+      existing.filter((product) => product.variants.some((v) => skus.includes(v.sku))),
+    ),
     list: vi.fn(),
     save: vi.fn(async (product: Product) => {
       saved.push(product);
+      return ok(undefined);
     }),
   };
   return { repo, saved };
@@ -55,7 +60,10 @@ const importer = (repo: ProductRepository, workbook: WorkbookReader) => {
 
 const file = new Uint8Array([1, 2, 3]);
 
-const existingProduct = (slug: string): Product => ({
+/** Header row for the sheets the conflict tests build inline. */
+const HEADERS = ['SKU', 'Title', 'Price'];
+
+const existingProduct = (slug: string, sku = 'OLD'): Product => ({
   storeId: 'taz4tech',
   id: 'EXISTING000000000000000AA' as EntityId<'Product'>,
   slug,
@@ -66,7 +74,7 @@ const existingProduct = (slug: string): Product => ({
   optionNames: [],
   variants: [
     {
-      sku: 'OLD',
+      sku,
       options: [],
       price: usd(100),
       compareAtPrice: null,
@@ -286,5 +294,191 @@ describe('importProducts', () => {
     await expect(importer(repo, reader(SHEET))({ file, commit: true })).rejects.toThrow(
       'write concern timeout',
     );
+  });
+});
+
+describe('a SKU that already belongs to another product', () => {
+  /*
+   * The failure this exists to prevent, in full:
+   *
+   *   1. "Anker Cable" exists, slug anker-cable, SKU ANK-1.
+   *   2. The operator renames it in the sheet to "Anker Cable 2m".
+   *   3. The slug becomes anker-cable-2m, which does not exist.
+   *   4. The plan says CREATE, and the unique index on the SKU refuses the
+   *      write — after everything before it in the sheet has been saved.
+   *
+   * The operator sees a 500 and a half-imported catalogue.
+   */
+  const owner = existingProduct('anker-cable', 'ANK-1');
+
+  it('is reported as a conflict rather than planned as a create', async () => {
+    const { repo } = repository([owner]);
+    const result = await importer(
+      repo,
+      reader([HEADERS, ['ANK-1', 'Anker Cable 2m', '19.99']]),
+    )({
+      file,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.plan.products).toEqual([]);
+    expect(result.value.plan.skuConflicts).toEqual([
+      { rows: [2], slug: 'anker-cable-2m', sku: 'ANK-1', ownedBySlug: 'anker-cable' },
+    ]);
+  });
+
+  it('counts its rows as rejected, so the summary is not quietly optimistic', async () => {
+    const { repo } = repository([owner]);
+    const result = await importer(
+      repo,
+      reader([HEADERS, ['ANK-1', 'Anker Cable 2m', '19.99']]),
+    )({
+      file,
+    });
+
+    if (!result.ok) return;
+    expect(result.value.plan.summary.rowsRejected).toBe(1);
+    expect(result.value.plan.summary.products).toBe(0);
+  });
+
+  it('does not write it even when the caller commits', async () => {
+    const { repo, saved } = repository([owner]);
+    const result = await importer(
+      repo,
+      reader([HEADERS, ['ANK-1', 'Anker Cable 2m', '19.99']]),
+    )({
+      file,
+      commit: true,
+    });
+
+    if (!result.ok) return;
+    expect(saved).toEqual([]);
+    expect(result.value.written).toBe(0);
+  });
+
+  it('lets the rest of the sheet through', async () => {
+    // The rule everywhere in this importer: one bad product must not stop 399
+    // good ones.
+    const { repo, saved } = repository([owner]);
+    const result = await importer(
+      repo,
+      reader([HEADERS, ['ANK-1', 'Anker Cable 2m', '19.99'], ['LOG-1', 'Logitech Mouse', '29.99']]),
+    )({ file, commit: true });
+
+    if (!result.ok) return;
+    expect(result.value.written).toBe(1);
+    expect(saved.map((product) => product.slug)).toEqual(['logitech-mouse']);
+  });
+
+  it('is NOT a conflict when the same product keeps its own SKU', async () => {
+    // The ordinary case — a re-imported price list — must stay an update.
+    const { repo } = repository([owner]);
+    const result = await importer(
+      repo,
+      reader([HEADERS, ['ANK-1', 'Anker Cable', '24.99']]),
+    )({
+      file,
+    });
+
+    if (!result.ok) return;
+    expect(result.value.plan.skuConflicts).toEqual([]);
+    expect(result.value.plan.products.map((planned) => planned.action)).toEqual(['update']);
+  });
+
+  it('looks the SKUs up once, in bulk', async () => {
+    const { repo } = repository([owner]);
+    await importer(
+      repo,
+      reader([HEADERS, ['ANK-1', 'A', '1.00'], ['LOG-1', 'B', '2.00']]),
+    )({ file });
+
+    expect(repo.findBySkus).toHaveBeenCalledOnce();
+    expect(repo.findBySkus).toHaveBeenCalledWith('taz4tech', ['ANK-1', 'LOG-1']);
+  });
+});
+
+describe('a write that loses a race', () => {
+  /*
+   * Even with the check above, two imports running at once can both plan a
+   * create and only one can win. What must NOT happen is a 500 that leaves the
+   * operator guessing how much of their catalogue landed.
+   */
+  const conflictingRepository = (takenSku: string) => {
+    const saved: Product[] = [];
+    const repo: ProductRepository = {
+      findBySlug: vi.fn().mockResolvedValue(null),
+      findById: vi.fn(),
+      findBySku: vi.fn(),
+      search: vi.fn(),
+      findBySlugs: vi.fn().mockResolvedValue([]),
+      findBySkus: vi.fn().mockResolvedValue([]),
+      list: vi.fn(),
+      save: vi.fn(async (product: Product) => {
+        if (product.variants.some((variant) => variant.sku === takenSku)) {
+          return err({ tag: 'sku_taken' as const, sku: takenSku });
+        }
+        saved.push(product);
+        return ok(undefined);
+      }),
+    };
+    return { repo, saved };
+  };
+
+  it('reports the failure instead of throwing', async () => {
+    const { repo } = conflictingRepository('ANK-1');
+    const result = await importer(
+      repo,
+      reader([HEADERS, ['ANK-1', 'Anker Cable', '19.99']]),
+    )({
+      file,
+      commit: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.written).toBe(0);
+    expect(result.value.failures).toEqual([
+      { slug: 'anker-cable', conflict: { tag: 'sku_taken', sku: 'ANK-1' } },
+    ]);
+  });
+
+  it('keeps writing the products after it', async () => {
+    const { repo, saved } = conflictingRepository('ANK-1');
+    const result = await importer(
+      repo,
+      reader([HEADERS, ['ANK-1', 'Anker Cable', '19.99'], ['LOG-1', 'Logitech Mouse', '29.99']]),
+    )({ file, commit: true });
+
+    if (!result.ok) return;
+    expect(result.value.written).toBe(1);
+    expect(result.value.failures).toHaveLength(1);
+    expect(saved.map((product) => product.slug)).toEqual(['logitech-mouse']);
+  });
+
+  it('still throws on something that is not a conflict', async () => {
+    // A dropped connection is not an expected outcome of importing a sheet, and
+    // must never be reported as a partial success.
+    const repo: ProductRepository = {
+      findBySlug: vi.fn().mockResolvedValue(null),
+      findById: vi.fn(),
+      findBySku: vi.fn(),
+      search: vi.fn(),
+      findBySlugs: vi.fn().mockResolvedValue([]),
+      findBySkus: vi.fn().mockResolvedValue([]),
+      list: vi.fn(),
+      save: vi.fn().mockRejectedValue(new Error('connection reset')),
+    };
+
+    await expect(
+      importer(
+        repo,
+        reader([HEADERS, ['ANK-1', 'Anker Cable', '19.99']]),
+      )({
+        file,
+        commit: true,
+      }),
+    ).rejects.toThrow('connection reset');
   });
 });

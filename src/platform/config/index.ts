@@ -12,6 +12,20 @@
 
 import { z } from 'zod';
 
+/**
+ * An optional secret, where BLANK means absent.
+ *
+ * Render writes an empty string for a `sync: false` variable the operator has
+ * not filled in yet. Without this, declaring the admin variables in render.yaml
+ * would stop the whole site from booting until a password was typed — an empty
+ * secret has to read as "no admin area", not as a fatal misconfiguration.
+ */
+const optionalSecret = (minimum: number, name: string) =>
+  z.preprocess(
+    (value) => (typeof value === 'string' && value.trim().length === 0 ? undefined : value),
+    z.string().min(minimum, `${name} must be at least ${minimum} characters`).optional(),
+  );
+
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
@@ -30,9 +44,30 @@ const EnvSchema = z.object({
   SITE_URL: z.url().default('https://taz4tech.com'),
 
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+
+  /**
+   * Admin area credentials. BOTH optional, and both must be set together.
+   *
+   * Absent, the admin area does not exist — every /admin URL is a 404. That is
+   * the safe default and it is why these are not required: a deploy that forgets
+   * them serves the storefront with no admin, rather than serving an admin with
+   * no password.
+   *
+   * The lengths are enforced here rather than trusted to whoever set them. A
+   * short session secret makes the token forgeable, which would let an attacker
+   * mint a valid admin session without ever seeing the password.
+   */
+  ADMIN_PASSWORD: optionalSecret(12, 'ADMIN_PASSWORD'),
+  ADMIN_SESSION_SECRET: optionalSecret(32, 'ADMIN_SESSION_SECRET'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
+
+/** Present only when the admin area is configured; null disables it entirely. */
+export type AdminConfig = {
+  readonly password: string;
+  readonly sessionSecret: string;
+};
 
 export type Config = {
   readonly env: Env['NODE_ENV'];
@@ -41,6 +76,7 @@ export type Config = {
   readonly storeId: string;
   readonly siteUrl: string;
   readonly logLevel: Env['LOG_LEVEL'];
+  readonly admin: AdminConfig | null;
 };
 
 export class ConfigError extends Error {
@@ -62,6 +98,23 @@ export const parseConfig = (source: Record<string, string | undefined>): Config 
     );
   }
   const env = parsed.data;
+
+  /*
+   * Half-configured is a configuration error, not a half-open door.
+   *
+   * Treating one-of-two as "admin off" would silently ignore a password the
+   * operator believed they had set; treating it as "admin on" would run the
+   * session signer with no secret. Refusing to boot is the only reading that
+   * cannot be wrong.
+   */
+  const { ADMIN_PASSWORD, ADMIN_SESSION_SECRET } = env;
+  if ((ADMIN_PASSWORD === undefined) !== (ADMIN_SESSION_SECRET === undefined)) {
+    throw new ConfigError([
+      'ADMIN_PASSWORD and ADMIN_SESSION_SECRET must be set together, or neither ' +
+        '(which disables the admin area).',
+    ]);
+  }
+
   return {
     env: env.NODE_ENV,
     isProduction: env.NODE_ENV === 'production',
@@ -69,6 +122,10 @@ export const parseConfig = (source: Record<string, string | undefined>): Config 
     storeId: env.STORE_ID,
     siteUrl: env.SITE_URL.replace(/\/+$/, ''),
     logLevel: env.LOG_LEVEL,
+    admin:
+      ADMIN_PASSWORD === undefined || ADMIN_SESSION_SECRET === undefined
+        ? null
+        : { password: ADMIN_PASSWORD, sessionSecret: ADMIN_SESSION_SECRET },
   };
 };
 

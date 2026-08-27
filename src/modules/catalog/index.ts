@@ -51,6 +51,14 @@ export {
   REQUIRED_FIELDS,
   validateMapping,
 } from './application/import/column-mapping';
+export type {
+  ImportReport,
+  ProductPreview,
+  ProductProblemView,
+  RowProblemView,
+  ToImportReportInput,
+} from './application/import/import-report';
+export { SAMPLE_ROW_COUNT, toImportReport } from './application/import/import-report';
 export type { CellProblem } from './application/import/parse-cell';
 export type {
   ImportPlan,

@@ -45,6 +45,17 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 60 * 60 * 24 * 30,
   },
 
+  /**
+   * The catalogue importer posts an .xlsx through a Server Action, and the
+   * default cap for one is 1 MB — small enough that a genuine supplier price
+   * list with embedded formatting would be rejected by the framework, before any
+   * code of ours could explain why.
+   *
+   * The action enforces its own 5 MB limit and produces a readable sentence; this
+   * is the outer bound that keeps a hostile upload from reaching it at all.
+   */
+  experimental: { serverActions: { bodySizeLimit: '6mb' } },
+
   /** Type errors fail the build. Linting is Biome's job, run as its own CI check. */
   typescript: { ignoreBuildErrors: false },
 

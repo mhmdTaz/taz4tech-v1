@@ -41,6 +41,28 @@ services:
       - key: LOG_LEVEL
         value: info
 
+      # Admin area. BOTH or NEITHER — set only one and the app refuses to boot,
+      # deliberately, rather than running a signer with no secret or ignoring a
+      # password the operator believes is protecting the site.
+      #
+      # Left blank, /admin is a 404 and there is no admin area. That is the right
+      # state for the first deploy: the storefront goes live before there is any
+      # write surface exposed to the internet at all.
+      #
+      # Generated rather than typed:
+      #   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+      # Rotating the secret signs every open session out, which is how access is
+      # revoked without a session table.
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_SESSION_SECRET
+        sync: false
+
+      # The importer is finished, but the screen that writes to the catalogue
+      # stays behind a switch that can be turned off without a deploy.
+      - key: TAZ_FLAG_EXCEL_IMPORTER
+        value: "on"
+
     # Every PR gets a disposable copy of the app. This is the eleventh required
     # check in the quality gate — the one a human actually looks at.
     previews:

@@ -47,6 +47,28 @@ export type ProductProblem = {
   readonly reason: ProductError;
 };
 
+/**
+ * A SKU in the sheet already belongs to a DIFFERENT product in the catalogue.
+ *
+ * Kept apart from ProductProblem because it is a different kind of wrong: the
+ * product the sheet describes is perfectly valid, it just cannot be written
+ * without taking a SKU from something else. The fix is also different — edit the
+ * catalogue, or correct the SKU — so it reads better as its own list than as one
+ * more entry in a column of validation failures.
+ *
+ * Detecting it here rather than letting the unique index do it is the whole
+ * point: the index answers with E11000 halfway through the write, after some
+ * products have already been saved.
+ */
+export type SkuConflict = {
+  readonly rows: readonly number[];
+  /** The slug the sheet is trying to create or update. */
+  readonly slug: string;
+  readonly sku: string;
+  /** The product that already owns the SKU. */
+  readonly ownedBySlug: string;
+};
+
 export type PlannedProduct = {
   readonly product: Product;
   readonly action: 'create' | 'update';
@@ -58,6 +80,7 @@ export type ImportPlan = {
   readonly products: readonly PlannedProduct[];
   readonly rowProblems: readonly RowProblem[];
   readonly productProblems: readonly ProductProblem[];
+  readonly skuConflicts: readonly SkuConflict[];
   readonly mappingProblems: readonly { tag: 'missing_required_field'; field: ImportField }[];
   readonly summary: {
     readonly dataRows: number;
@@ -76,6 +99,13 @@ export type PlanImportInput = {
   readonly now: Date;
   /** Slug -> existing product, so the plan can say create vs update. */
   readonly existingBySlug: ReadonlyMap<string, Product>;
+  /**
+   * SKU -> the slug of the product that already owns it.
+   *
+   * Empty on the first, provisional pass — that pass exists only to work out
+   * which slugs and SKUs to look up.
+   */
+  readonly ownerSlugBySku: ReadonlyMap<string, string>;
   /** Ids for products being created. */
   readonly nextId: () => EntityId<'Product'>;
 };
@@ -270,6 +300,62 @@ const assembleProduct = (
   return { product: product.value, action: existing === undefined ? 'create' : 'update' };
 };
 
+/**
+ * The first SKU on this product that already belongs to something else.
+ *
+ * A SKU owned by the SAME slug is not a conflict — that is an update, which is
+ * the normal case for a re-imported price list.
+ */
+const findStolenSku = (
+  product: Product,
+  ownerSlugBySku: ReadonlyMap<string, string>,
+): { sku: string; ownedBySlug: string } | null => {
+  for (const variant of product.variants) {
+    const ownedBySlug = ownerSlugBySku.get(variant.sku);
+    if (ownedBySlug !== undefined && ownedBySlug !== product.slug) {
+      return { sku: variant.sku, ownedBySlug };
+    }
+  }
+  return null;
+};
+
+type Assembled = {
+  products: PlannedProduct[];
+  productProblems: ProductProblem[];
+  skuConflicts: SkuConflict[];
+};
+
+/** Turn the slug groups into products, sorting each into the list it belongs in. */
+const assembleGroups = (
+  groups: ReadonlyMap<string, readonly [ParsedRow, ...ParsedRow[]]>,
+  input: PlanImportInput,
+): Assembled => {
+  const result: Assembled = { products: [], productProblems: [], skuConflicts: [] };
+
+  for (const rows of groups.values()) {
+    const assembled = assembleProduct(rows, input);
+    if ('error' in assembled) {
+      result.productProblems.push(assembled.error);
+      continue;
+    }
+
+    const rowNumbers = rows.map((row) => row.rowNumber);
+    const stolen = findStolenSku(assembled.product, input.ownerSlugBySku);
+    if (stolen !== null) {
+      result.skuConflicts.push({ rows: rowNumbers, slug: assembled.product.slug, ...stolen });
+      continue;
+    }
+
+    result.products.push({
+      product: assembled.product,
+      action: assembled.action,
+      rows: rowNumbers,
+    });
+  }
+
+  return result;
+};
+
 export const planImport = (input: PlanImportInput): ImportPlan => {
   const mappingProblems = validateMapping(input.mapping);
   const [, ...dataRows] = input.rows;
@@ -279,6 +365,7 @@ export const planImport = (input: PlanImportInput): ImportPlan => {
       products: [],
       rowProblems: [],
       productProblems: [],
+      skuConflicts: [],
       mappingProblems,
       summary: {
         dataRows: dataRows.length,
@@ -325,29 +412,17 @@ export const planImport = (input: PlanImportInput): ImportPlan => {
     else group.push(row);
   }
 
-  const products: PlannedProduct[] = [];
-  const productProblems: ProductProblem[] = [];
-
-  for (const rows of groups.values()) {
-    const assembled = assembleProduct(rows, input);
-    if ('error' in assembled) {
-      productProblems.push(assembled.error);
-      continue;
-    }
-    products.push({
-      product: assembled.product,
-      action: assembled.action,
-      rows: rows.map((row) => row.rowNumber),
-    });
-  }
+  const { products, productProblems, skuConflicts } = assembleGroups(groups, input);
 
   const rejectedRows = new Set<number>(rowProblems.map((problem) => problem.row));
   for (const problem of productProblems) for (const row of problem.rows) rejectedRows.add(row);
+  for (const conflict of skuConflicts) for (const row of conflict.rows) rejectedRows.add(row);
 
   return {
     products,
     rowProblems,
     productProblems,
+    skuConflicts,
     mappingProblems,
     summary: {
       dataRows: dataRows.length,
