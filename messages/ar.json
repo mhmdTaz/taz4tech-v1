@@ -35,6 +35,15 @@
     "sku": "رمز المنتج",
     "gallery": "صور المنتج",
     "breadcrumb": "مسار التنقّل",
-    "notFoundTitle": "المنتج غير موجود"
+    "notFoundTitle": "المنتج غير موجود",
+    "filters": "عوامل التصفية",
+    "brand": "العلامة التجارية",
+    "clearFilters": "مسح كل عوامل التصفية",
+    "searchLabel": "ابحث عن المنتجات",
+    "searchPlaceholder": "ابحث عن لابتوب، شاحن، كابل…",
+    "searchSubmit": "بحث",
+    "noMatches": "لا توجد نتائج مطابقة. جرّب توسيع نطاق البحث.",
+    "resultCount": "{count, plural, =0 {لا توجد منتجات} one {منتج واحد} two {منتجان} few {# منتجات} many {# منتجًا} other {# منتج}}",
+    "selected": "محدد"
   }
 }

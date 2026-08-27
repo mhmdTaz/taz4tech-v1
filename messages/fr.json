@@ -35,6 +35,15 @@
     "sku": "Référence",
     "gallery": "Images du produit",
     "breadcrumb": "Fil d'Ariane",
-    "notFoundTitle": "Produit introuvable"
+    "notFoundTitle": "Produit introuvable",
+    "filters": "Filtres",
+    "brand": "Marque",
+    "clearFilters": "Effacer tous les filtres",
+    "searchLabel": "Rechercher des produits",
+    "searchPlaceholder": "Cherchez un ordinateur portable, un chargeur, un câble…",
+    "searchSubmit": "Rechercher",
+    "noMatches": "Aucun résultat pour ces filtres. Essayez de les élargir.",
+    "resultCount": "{count, plural, =0 {Aucun produit} one {# produit} other {# produits}}",
+    "selected": "sélectionné"
   }
 }
