@@ -25,7 +25,8 @@
     "seed": "tsx scripts/seed.ts",
     "test:e2e:ui": "playwright test --ui",
     "bundle:budget": "node scripts/check-bundle-budget.mjs",
-    "boundaries:verify": "node scripts/verify-boundary-rules.mjs"
+    "boundaries:verify": "node scripts/verify-boundary-rules.mjs",
+    "seed:demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "mongodb": "^7.6.0",

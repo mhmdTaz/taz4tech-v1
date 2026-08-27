@@ -9,6 +9,7 @@
 import type { Db } from '@platform/mongo';
 import { type GetProductBySlug, makeGetProductBySlug } from './application/get-product-by-slug';
 import { type ListProducts, makeListProducts } from './application/list-products';
+import { makeSaveProduct, type SaveProduct } from './application/save-product';
 import {
   createMongoProductRepository,
   ensureProductIndexes,
@@ -21,6 +22,17 @@ export type {
   ListProductsInput,
 } from './application/list-products';
 export { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from './application/list-products';
+export type {
+  Availability,
+  ProductStructuredData,
+  StructuredDataOptions,
+} from './application/product-structured-data';
+export {
+  buildProductStructuredData,
+  productPath,
+  productUrl,
+} from './application/product-structured-data';
+export type { SaveProduct, SaveProductError } from './application/save-product';
 export type { ListProductsQuery, ProductPage, ProductRepository } from './contracts';
 export type {
   Media,
@@ -49,16 +61,22 @@ export {
 export type CatalogModule = {
   readonly getProductBySlug: GetProductBySlug;
   readonly listProducts: ListProducts;
+  readonly saveProduct: SaveProduct;
   readonly ensureIndexes: () => Promise<void>;
 };
 
-export const createCatalogModule = (deps: { db: Db; storeId: string }): CatalogModule => {
+export const createCatalogModule = (deps: {
+  db: Db;
+  storeId: string;
+  now: () => Date;
+}): CatalogModule => {
   const repository = createMongoProductRepository(deps.db);
   const wiring = { repository, storeId: deps.storeId };
 
   return {
     getProductBySlug: makeGetProductBySlug(wiring),
     listProducts: makeListProducts(wiring),
+    saveProduct: makeSaveProduct({ ...wiring, now: deps.now }),
     ensureIndexes: () => ensureProductIndexes(deps.db),
   };
 };

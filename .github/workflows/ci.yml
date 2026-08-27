@@ -156,6 +156,11 @@ jobs:
       - name: Seed the store
         run: pnpm seed
 
+      - name: Seed the demo catalogue
+        # Fixtures, never run against Atlas — the listing and product pages need
+        # something to render, including a draft that must stay hidden.
+        run: pnpm seed:demo
+
       - name: Playwright (all locales, axe included)
         run: pnpm exec playwright test --shard=${{ matrix.shard }}/4
 
@@ -201,6 +206,11 @@ jobs:
 
       - name: Seed the store
         run: pnpm seed
+
+      - name: Seed the demo catalogue
+        # Fixtures, never run against Atlas — the listing and product pages need
+        # something to render, including a draft that must stay hidden.
+        run: pnpm seed:demo
 
       - name: Lighthouse CI
         run: pnpm exec lhci autorun
