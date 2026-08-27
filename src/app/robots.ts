@@ -12,6 +12,11 @@ import type { MetadataRoute } from 'next';
  * by the session check on every admin page and action; the admin layout also
  * sends `noindex` for a crawler that fetches anyway.
  *
+ * Cart and checkout are personal and have nothing to rank for. The order
+ * confirmation matters most: it carries a name, a phone number and a street
+ * address against a URL whose numbers are sequential, so it sends `noindex,
+ * nofollow` of its own as well as being disallowed here.
+ *
  * The `?variant=` disallow matters: every option combination is a distinct URL
  * by design (so it can be shared and works without JavaScript), but they all
  * render substantially the same page. The canonical already points at the bare
@@ -26,7 +31,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/api/', '/admin', '/*?variant='],
+        disallow: ['/api/', '/admin', '/*/cart', '/*/checkout', '/*?variant='],
       },
     ],
     sitemap: `${siteUrl}/sitemap.xml`,

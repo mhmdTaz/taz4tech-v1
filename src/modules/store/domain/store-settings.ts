@@ -32,6 +32,17 @@ export type StoreSettings = {
    * hides the line rather than printing an empty label.
    */
   readonly commercialRegistryNumber: string | null;
+  /**
+   * Delivery fee, in integer cents, applied to every order.
+   *
+   * FLAT, deliberately, and 0 by default. Delivery cost in Lebanon genuinely
+   * varies by governorate — Beirut is not Akkar — so a per-region table is the
+   * obvious next step. It is not here yet because there is no store-settings
+   * admin screen to edit one, and a table nobody can change is worse than a
+   * number everybody understands. The region IS recorded on every order, so the
+   * data to price one properly is being collected from today.
+   */
+  readonly deliveryFeeCents: number;
 };
 
 export type StoreSettingsError =
@@ -39,7 +50,8 @@ export type StoreSettingsError =
   | { readonly tag: 'no_locales' }
   | { readonly tag: 'default_locale_not_offered'; readonly defaultLocale: Locale }
   | { readonly tag: 'vat_out_of_range'; readonly vatBasisPoints: number }
-  | { readonly tag: 'phone_not_e164'; readonly contactPhone: string };
+  | { readonly tag: 'phone_not_e164'; readonly contactPhone: string }
+  | { readonly tag: 'delivery_fee_invalid'; readonly deliveryFeeCents: number };
 
 const E164 = /^\+[1-9]\d{7,14}$/;
 
@@ -64,6 +76,11 @@ export const createStoreSettings = (
   }
   if (!E164.test(input.contactPhone)) {
     return err({ tag: 'phone_not_e164', contactPhone: input.contactPhone });
+  }
+  // Money everywhere in this system is integer cents. A fractional fee is a
+  // caller that computed one from a float, which is the bug this catches.
+  if (!Number.isInteger(input.deliveryFeeCents) || input.deliveryFeeCents < 0) {
+    return err({ tag: 'delivery_fee_invalid', deliveryFeeCents: input.deliveryFeeCents });
   }
   return ok({ ...input, name: input.name.trim(), siteUrl: input.siteUrl.replace(/\/+$/, '') });
 };

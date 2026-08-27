@@ -15,6 +15,7 @@ const valid: StoreSettings = {
   contactPhone: '+96170123456',
   vatBasisPoints: 1100,
   commercialRegistryNumber: null,
+  deliveryFeeCents: 0,
 };
 
 describe('createStoreSettings', () => {
@@ -111,5 +112,29 @@ describe('showsRegistryNumber', () => {
 
   it('is shown once there is a number to show', () => {
     expect(showsRegistryNumber({ ...valid, commercialRegistryNumber: '1234567' })).toBe(true);
+  });
+});
+
+describe('the delivery fee', () => {
+  it('accepts zero, which is what a shop that does not charge for delivery sets', () => {
+    expect(createStoreSettings({ ...valid, deliveryFeeCents: 0 }).ok).toBe(true);
+  });
+
+  it('accepts a real fee', () => {
+    const result = createStoreSettings({ ...valid, deliveryFeeCents: 300 });
+    expect(result.ok && result.value.deliveryFeeCents).toBe(300);
+  });
+
+  it('refuses a fractional fee', () => {
+    // Money everywhere in this system is integer cents. A fraction here is a
+    // caller that computed one from a float, which is the bug this catches.
+    expect(createStoreSettings({ ...valid, deliveryFeeCents: 2.5 })).toEqual({
+      ok: false,
+      error: { tag: 'delivery_fee_invalid', deliveryFeeCents: 2.5 },
+    });
+  });
+
+  it('refuses a negative fee, which would be a discount by accident', () => {
+    expect(createStoreSettings({ ...valid, deliveryFeeCents: -100 }).ok).toBe(false);
   });
 });

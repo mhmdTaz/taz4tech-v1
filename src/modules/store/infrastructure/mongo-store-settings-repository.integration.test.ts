@@ -23,6 +23,7 @@ const settings = (overrides: Partial<StoreSettings> = {}): StoreSettings => ({
   contactPhone: '+96170123456',
   vatBasisPoints: 1100,
   commercialRegistryNumber: null,
+  deliveryFeeCents: 0,
   ...overrides,
 });
 

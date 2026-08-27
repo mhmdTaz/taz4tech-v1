@@ -14,6 +14,7 @@
 import { type CartModule, createCartModule } from '@modules/cart';
 import { type CatalogModule, createCatalogModule, type StockWriter } from '@modules/catalog';
 import { createInventoryModule, type InventoryModule } from '@modules/inventory';
+import { createOrdersModule, type OrdersModule } from '@modules/orders';
 import { createStoreModule, type StoreModule } from '@modules/store';
 import { type Clock, systemClock } from '@platform/clock';
 import { type Config, getConfig } from '@platform/config';
@@ -21,6 +22,7 @@ import { createFlags, type Flags } from '@platform/flags';
 import { createIdGenerator, type IdGenerator } from '@platform/ids';
 import { createLogger, type Logger } from '@platform/logger';
 import { type Db, getDb } from '@platform/mongo';
+import { err, ok } from '@platform/result';
 
 export type Container = {
   readonly config: Config;
@@ -33,6 +35,7 @@ export type Container = {
   readonly catalog: CatalogModule;
   readonly inventory: InventoryModule;
   readonly cart: CartModule;
+  readonly orders: OrdersModule;
 };
 
 export const buildContainer = async (): Promise<Container> => {
@@ -119,10 +122,62 @@ export const buildContainer = async (): Promise<Container> => {
     now: () => clock.now(),
   });
 
-  await Promise.all([store.ensureIndexes(), catalog.ensureIndexes(), inventory.ensureIndexes()]);
+  /*
+   * Orders sit on top of everything else: they price through the cart, take
+   * stock through inventory, and read the delivery fee from store settings.
+   * Every one of those arrives as a plain function, so the orders module never
+   * holds another module — the wiring is here, where it can be read.
+   */
+  const orders = createOrdersModule({
+    db,
+    storeId: config.storeId,
+    priceCart: cart.priceCart,
+    stock: {
+      /*
+       * The translation between two vocabularies, written out rather than left
+       * to two error unions that happen to overlap.
+       *
+       * Inventory says "the adjustment failed, and here is why"; an order needs
+       * the difference between "nobody counts this, sell it" and "there are not
+       * that many", because the first is a sale and the second is a refusal.
+       */
+      take: async (sku, quantity) => {
+        const result = await inventory.adjustStock(sku, -quantity);
+        if (result.ok) return ok(undefined);
+
+        if (result.error.tag === 'failed' && result.error.reason.tag === 'insufficient') {
+          return err({ tag: 'insufficient' as const, onHand: result.error.reason.onHand });
+        }
+        if (result.error.tag === 'failed' && result.error.reason.tag === 'untracked') {
+          return err({ tag: 'untracked' as const });
+        }
+        // invalid_delta is a caller bug, not a stock condition, and must not be
+        // reported to a customer as "out of stock".
+        throw new Error(`Stock could not be taken for ${sku}: ${result.error.tag}`);
+      },
+      giveBack: async (sku, quantity) => {
+        await inventory.adjustStock(sku, quantity);
+      },
+    },
+    deliveryFeeCents: async () => {
+      const settings = await store.getStoreSettings();
+      // No settings document yet means a shop that has not been configured;
+      // charging a delivery fee nobody set would be worse than charging none.
+      return settings.ok ? settings.value.deliveryFeeCents : 0;
+    },
+    now: () => clock.now(),
+    nextId: () => ids.next(),
+  });
+
+  await Promise.all([
+    store.ensureIndexes(),
+    catalog.ensureIndexes(),
+    inventory.ensureIndexes(),
+    orders.ensureIndexes(),
+  ]);
   logger.debug('indexes ensured');
 
-  return { config, db, clock, ids, logger, flags, store, catalog, inventory, cart };
+  return { config, db, clock, ids, logger, flags, store, catalog, inventory, cart, orders };
 };
 
 /**
