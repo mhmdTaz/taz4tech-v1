@@ -265,8 +265,13 @@ test.describe('other locales', () => {
 test.describe('the site header', () => {
   test('links to the catalogue and the cart from every page', async ({ page }) => {
     await page.goto('/en');
-    await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Products' })).toBeVisible();
+
+    // Scoped to the header's own nav: the footer links to Products too, so an
+    // unscoped role query matches both and fails strict mode. This test is
+    // about the header, so it should say so.
+    const primary = page.getByRole('navigation', { name: 'Primary' });
+    await expect(primary).toBeVisible();
+    await expect(primary.getByRole('link', { name: 'Products' })).toBeVisible();
     await expect(cartLink(page)).toBeVisible();
   });
 

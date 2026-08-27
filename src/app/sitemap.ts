@@ -26,6 +26,9 @@ import { getContainer } from '@/composition';
  */
 export const dynamic = 'force-dynamic';
 
+/** Static, written pages — one route each, the same set the footer links to. */
+const WRITTEN_PAGES = ['delivery', 'returns', 'terms', 'privacy', 'contact'] as const;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const container = await getContainer();
   const { siteUrl } = container.config;
@@ -56,6 +59,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
       alternates: languagesFor((locale) => `/${locale}/collections`),
     },
+    /*
+     * The written pages. Low priority and rarely changed, but genuinely worth
+     * indexing: "does this shop deliver to Akkar" and "how do I return this" are
+     * things people search for by name, and a delivery page that answers them is
+     * a page that brings its own traffic.
+     */
+    ...WRITTEN_PAGES.map((path) => ({
+      url: absolute(`/en/${path}`),
+      changeFrequency: 'yearly' as const,
+      priority: 0.4,
+      alternates: languagesFor((locale) => `/${locale}/${path}`),
+    })),
   ];
 
   /*

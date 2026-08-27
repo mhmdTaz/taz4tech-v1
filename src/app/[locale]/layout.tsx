@@ -7,6 +7,7 @@ import { setRequestLocale } from 'next-intl/server';
 import { routing } from '@/i18n/routing';
 import '../globals.css';
 import { Suspense } from 'react';
+import { SiteFooter } from './site-footer';
 import { SiteHeader } from './site-header';
 
 /**
@@ -79,6 +80,25 @@ export default async function LocaleLayout({
             <SiteHeader locale={locale} />
           </Suspense>
           <div id="content">{children}</div>
+
+          {/*
+            NOT behind a boundary, unlike the header above it.
+
+            The header's Suspense resolves before the response flushes, because
+            reading a cookie is instant. The footer waits on a database round
+            trip, so React flushes the fallback and streams the real content in
+            afterwards using an inline script — which means a browser with
+            JavaScript disabled never sees it at all. That is merely annoying for
+            a product grid. For the one place the shop states who it is, under
+            Law 81/2018 Art. 31, a disclosure that needs JavaScript is not a
+            disclosure. Found by the e2e spec, which loads a page with JavaScript
+            off and reads the footer out of the HTML.
+
+            The cost is one indexed lookup by storeId before the response
+            flushes. Every route under this layout is already server-rendered on
+            demand, so there is no prerendered shell being given up for it.
+          */}
+          <SiteFooter locale={locale} />
         </NextIntlClientProvider>
       </body>
     </html>

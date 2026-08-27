@@ -198,6 +198,20 @@ test.describe('choosing a variant', () => {
     // Picking 512GB from Black/256 must land on Black/512, not on some other
     // colour that happens to have 512.
     await openFor(page, /Lenovo IdeaPad 3/);
+
+    /*
+     * The starting point is asserted, not assumed.
+     *
+     * Without this, a dialog that opened on Silver for any reason fails on the
+     * line below and reads as "changing an option loses the colour" — a bug in
+     * the component — when the component did exactly the right thing from a
+     * different starting state. Two lines to make the failure name itself.
+     */
+    await expect(dialog(page).getByRole('button', { name: 'Black' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
     await dialog(page).getByRole('button', { name: '512GB' }).click();
     await expect(dialog(page).getByRole('button', { name: 'Black' })).toHaveAttribute(
       'aria-pressed',

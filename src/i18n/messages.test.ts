@@ -67,6 +67,11 @@ describe('message bundles', () => {
       (key) => arValues[key] === untranslated[key] && frValues[key] === untranslated[key],
     );
 
-    expect(identical).toEqual(['home.title']);
+    /*
+     * home.title is the shop's name. footer.rights is "© {year} {name}" — two
+     * placeholders and a symbol, with no word in it to translate; writing a
+     * different one per locale would be inventing difference to satisfy a test.
+     */
+    expect(identical).toEqual(['footer.rights', 'home.title']);
   });
 });
