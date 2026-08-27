@@ -76,6 +76,24 @@ beforeEach(async () => {
   await ensureProductIndexes(db);
 });
 
+/** Distinct SKU per product — the unique index forbids reuse, correctly. */
+const productWithSku = (n: number, slug: string): Product =>
+  product({
+    id: id(n),
+    slug,
+    variants: [
+      {
+        sku: `SKU-${n}`,
+        options: [],
+        price: usd(1000 * n),
+        compareAtPrice: null,
+        offerEndsAt: null,
+        barcode: null,
+        weightGrams: null,
+      },
+    ],
+  });
+
 describe('MongoProductRepository', () => {
   it('round-trips a product exactly, including money and dates', async () => {
     const repository = createMongoProductRepository(db);
@@ -170,6 +188,37 @@ describe('MongoProductRepository', () => {
     await repository.save(product({ id: id(7) }));
     expect((await repository.findById('taz4tech', id(7)))?.id).toBe(id(7));
     expect(await repository.findById('other', id(7))).toBeNull();
+  });
+
+  describe('findBySlugs', () => {
+    it('returns every match in one query', async () => {
+      const repository = createMongoProductRepository(db);
+      await repository.save(productWithSku(1, 'a'));
+      await repository.save(productWithSku(2, 'b'));
+      await repository.save(productWithSku(3, 'c'));
+
+      const found = await repository.findBySlugs('taz4tech', ['a', 'c', 'missing']);
+      expect(found.map((p) => p.slug).sort()).toEqual(['a', 'c']);
+    });
+
+    it('returns nothing for an empty list without querying', async () => {
+      expect(await createMongoProductRepository(db).findBySlugs('taz4tech', [])).toEqual([]);
+    });
+
+    it('never crosses tenants', async () => {
+      const repository = createMongoProductRepository(db);
+      await repository.save(product({ storeId: 'tenant-a', id: id(1), slug: 'shared' }));
+      expect(await repository.findBySlugs('tenant-b', ['shared'])).toEqual([]);
+    });
+
+    it('uses an index rather than scanning', async () => {
+      const repository = createMongoProductRepository(db);
+      await repository.save(productWithSku(1, 'a'));
+
+      const stages = await explainOf({ storeId: 'taz4tech', slug: { $in: ['a', 'b'] } });
+      expect(scansCollection(stages), stages.join(', ')).toBe(false);
+      expect(usesIndex(stages), stages.join(', ')).toBe(true);
+    });
   });
 
   it('upserts rather than duplicating on a second save', async () => {

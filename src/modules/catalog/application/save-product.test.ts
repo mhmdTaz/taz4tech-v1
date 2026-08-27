@@ -41,6 +41,7 @@ const repositoryWith = (existing: Product | null = null) => {
     findBySlug: vi.fn().mockResolvedValue(existing),
     findById: vi.fn(),
     findBySku: vi.fn(),
+    findBySlugs: vi.fn().mockResolvedValue([]),
     list: vi.fn(),
     save: vi.fn().mockResolvedValue(undefined),
   };
@@ -140,6 +141,7 @@ describe('saveProduct', () => {
       findBySlug: vi.fn().mockResolvedValue(null),
       findById: vi.fn(),
       findBySku: vi.fn(),
+      findBySlugs: vi.fn().mockResolvedValue([]),
       list: vi.fn(),
       save: vi.fn().mockRejectedValue(new Error('write concern timeout')),
     };

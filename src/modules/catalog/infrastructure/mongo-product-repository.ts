@@ -197,6 +197,14 @@ export const createMongoProductRepository = (db: Db): ProductRepository => {
       return doc === null ? null : toDomain(doc, `${storeId}/sku:${sku}`);
     },
 
+    async findBySlugs(storeId, slugs) {
+      if (slugs.length === 0) return [];
+      // $in over the {storeId, slug} unique index: one round trip for the whole
+      // import rather than one per row.
+      const docs = await collection.find({ storeId, slug: { $in: [...slugs] } }).toArray();
+      return docs.map((doc) => toDomain(doc, `${storeId}/${doc.slug}`));
+    },
+
     async list(query: ListProductsQuery): Promise<ProductPage> {
       /*
        * Newest first, paginated on _id. Because the id is a ULID its first 10

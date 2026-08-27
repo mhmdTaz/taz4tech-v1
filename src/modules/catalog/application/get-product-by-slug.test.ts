@@ -40,6 +40,7 @@ const repositoryReturning = (value: Product | null) => {
     findBySlug,
     findById: vi.fn(),
     findBySku: vi.fn(),
+    findBySlugs: vi.fn().mockResolvedValue([]),
     list: vi.fn(),
     save: vi.fn(),
   };
@@ -133,6 +134,7 @@ describe('getProductBySlug', () => {
       findBySlug: vi.fn().mockRejectedValue(new Error('connection refused')),
       findById: vi.fn(),
       findBySku: vi.fn(),
+      findBySlugs: vi.fn().mockResolvedValue([]),
       list: vi.fn(),
       save: vi.fn(),
     };
