@@ -71,6 +71,8 @@ const report = (rows: string[][], existing: Product[] = []) => {
     committed: false,
     written: 0,
     failures: [],
+    stockFailures: [],
+    stockWritten: 0,
   });
 };
 
@@ -230,6 +232,8 @@ describe('toImportReport', () => {
       committed: false,
       written: 0,
       failures: [],
+      stockFailures: [],
+      stockWritten: 0,
     });
 
     expect(result.mappingProblems.map((problem) => problem.field)).toEqual([
@@ -276,6 +280,8 @@ describe('toImportReport', () => {
         committed: true,
         written: 1,
         failures: [],
+        stockFailures: [],
+        stockWritten: 0,
       });
 
       expect(result.committed).toBe(true);
@@ -286,12 +292,15 @@ describe('toImportReport', () => {
 
   describe('conflicts and failures', () => {
     const withPlan = (
-      overrides: Partial<Parameters<typeof toImportReport>[0]>,
+      overrides: Partial<Parameters<typeof toImportReport>[0]> = {},
     ): ReturnType<typeof toImportReport> => {
+      // Built as a complete input first, then overridden. Spreading a Partial
+      // into an object literal makes every overridden field OPTIONAL under
+      // exactOptionalPropertyTypes, which the parameter type then refuses.
       const all = [HEADERS, row('A-1', 'Anker Cable', '19.99')];
       const mapping = detectMapping(HEADERS);
       idCounter = 0;
-      return toImportReport({
+      const base: Parameters<typeof toImportReport>[0] = {
         headers: HEADERS,
         rows: all,
         mapping,
@@ -307,8 +316,11 @@ describe('toImportReport', () => {
         committed: false,
         written: 0,
         failures: [],
-        ...overrides,
-      });
+        stockFailures: [],
+        stockWritten: 0,
+      };
+
+      return toImportReport(Object.assign(base, overrides));
     };
 
     it('carries a SKU conflict through with the slug that owns it', () => {
@@ -332,6 +344,8 @@ describe('toImportReport', () => {
         committed: false,
         written: 0,
         failures: [],
+        stockFailures: [],
+        stockWritten: 0,
       });
 
       expect(result.skuConflicts).toEqual([

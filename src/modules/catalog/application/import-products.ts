@@ -11,7 +11,13 @@
 
 import type { EntityId } from '@platform/ids';
 import { err, ok, type Result } from '@platform/result';
-import type { ProductRepository, SaveConflict, WorkbookReader } from '../contracts';
+import type {
+  ProductRepository,
+  SaveConflict,
+  StockWriteFailure,
+  StockWriter,
+  WorkbookReader,
+} from '../contracts';
 import type { Product } from '../domain/product';
 import { type ColumnMapping, detectMapping } from './import/column-mapping';
 import { type ImportPlan, planImport } from './import/plan-import';
@@ -53,6 +59,10 @@ export type ImportProductsOutput = {
    * from one that reports success and quietly wrote less.
    */
   readonly failures: readonly { readonly slug: string; readonly conflict: SaveConflict }[];
+  /** SKUs whose stock the sheet stated and the write refused. */
+  readonly stockFailures: readonly StockWriteFailure[];
+  /** SKUs whose stock this import set. Zero when the sheet had no stock column. */
+  readonly stockWritten: number;
   readonly committed: boolean;
 };
 
@@ -64,6 +74,8 @@ export const makeImportProducts =
   (deps: {
     repository: ProductRepository;
     reader: WorkbookReader;
+    /** Injected, not imported: see the note on the port in ../contracts. */
+    stock: StockWriter;
     storeId: string;
     now: () => Date;
     nextId: () => EntityId<'Product'>;
@@ -155,7 +167,17 @@ export const makeImportProducts =
     });
 
     if (input.commit !== true) {
-      return ok({ headers, rows, mapping, plan, written: 0, failures: [], committed: false });
+      return ok({
+        headers,
+        rows,
+        mapping,
+        plan,
+        written: 0,
+        failures: [],
+        stockFailures: [],
+        stockWritten: 0,
+        committed: false,
+      });
     }
 
     /*
@@ -166,11 +188,17 @@ export const makeImportProducts =
      */
     let written = 0;
     const failures: { slug: string; conflict: SaveConflict }[] = [];
+    const levels: { sku: string; onHand: number }[] = [];
 
     for (const planned of plan.products) {
       const saved = await deps.repository.save(planned.product);
       if (saved.ok) {
         written++;
+        // Stock is collected rather than written per product, so the whole
+        // sheet costs one batch instead of one round trip per row. Only for
+        // products that actually landed: setting stock for a product that was
+        // refused would leave a level for something not in the catalogue.
+        levels.push(...planned.stock);
         continue;
       }
       /*
@@ -184,5 +212,24 @@ export const makeImportProducts =
       failures.push({ slug: planned.product.slug, conflict: saved.error });
     }
 
-    return ok({ headers, rows, mapping, plan, written, failures, committed: true });
+    /*
+     * Stock is written AFTER the products, and only for the ones that landed.
+     *
+     * The other order would leave a stock level for a product the unique index
+     * refused — a count for something not in the catalogue, which nothing would
+     * ever reconcile.
+     */
+    const stockFailures = levels.length === 0 ? [] : await deps.stock.setLevels(levels);
+
+    return ok({
+      headers,
+      rows,
+      mapping,
+      plan,
+      written,
+      failures,
+      stockFailures,
+      stockWritten: levels.length - stockFailures.length,
+      committed: true,
+    });
   };

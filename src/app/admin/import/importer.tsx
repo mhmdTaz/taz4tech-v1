@@ -307,6 +307,9 @@ const Preview = ({ report }: { report: ImportReport }) => {
                 Price
               </th>
               <th scope="col" className={headCell}>
+                Stock
+              </th>
+              <th scope="col" className={headCell}>
                 Languages
               </th>
               <th scope="col" className={headCell}>
@@ -337,6 +340,16 @@ const Preview = ({ report }: { report: ImportReport }) => {
                 <td className={`${cell} tabular-nums text-muted`}>{product.variantCount}</td>
                 <td className={`${cell} tabular-nums text-ink`}>
                   {priceLabel(product.priceFromCents, product.priceToCents, product.currency)}
+                </td>
+                <td className={`${cell} tabular-nums text-muted`}>
+                  {/*
+                    An em dash, not a zero. A sheet that says nothing about stock
+                    leaves the SKU uncounted — which stays on sale — and printing
+                    0 here would read as sold out.
+                  */}
+                  {product.stock.length === 0
+                    ? '—'
+                    : product.stock.map((level) => `${level.sku}: ${level.onHand}`).join(', ')}
                 </td>
                 <td className={`${cell} text-muted`}>
                   {product.translatedInto.join(', ')}
@@ -371,8 +384,18 @@ const Receipt = ({ report, diverged }: { report: ImportReport; diverged: boolean
   return (
     <div role="status" className={`${panel} border-positive/60 flex flex-col gap-1 text-positive`}>
       <p className="font-medium">
-        Imported {report.written} product{report.written === 1 ? '' : 's'}.
+        Imported {report.written} product{report.written === 1 ? '' : 's'}
+        {report.stockWritten > 0 && `, and set stock on ${report.stockWritten} SKUs`}.
       </p>
+      {report.stockFailures.length > 0 && (
+        <ul className="list-disc ps-5 text-negative">
+          {report.stockFailures.map((failure) => (
+            <li key={failure.sku}>
+              stock for {failure.sku} — {failure.reason}
+            </li>
+          ))}
+        </ul>
+      )}
       {diverged && (
         <p className="text-caution">
           What was written differs from the preview you approved — the catalogue changed in between.

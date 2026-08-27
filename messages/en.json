@@ -49,7 +49,10 @@
     "quickViewOf": "Quick view: {title}",
     "close": "Close",
     "fullDetails": "View full details",
-    "quickViewHint": "A summary. The full page has specifications and every photo."
+    "quickViewHint": "A summary. The full page has specifications and every photo.",
+    "inStock": "In stock",
+    "outOfStock": "Out of stock",
+    "unitsLeft": "Only {count} left"
   },
   "collections": {
     "title": "Collections",

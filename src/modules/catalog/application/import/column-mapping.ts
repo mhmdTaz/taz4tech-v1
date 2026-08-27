@@ -32,6 +32,7 @@ export const IMPORT_FIELDS = [
   'option2Value',
   'imageUrl',
   'imageAlt',
+  'stock',
 ] as const;
 
 export type ImportField = (typeof IMPORT_FIELDS)[number];
@@ -77,6 +78,13 @@ const HEADER_ALIASES: Record<ImportField, readonly string[]> = {
   option2Value: ['option2value', 'optionvalue2', 'attribute2value'],
   imageUrl: ['imageurl', 'imagesrc', 'image', 'photo', 'picture'],
   imageAlt: ['imagealt', 'imagealttext', 'alt', 'alttext'],
+  /*
+   * Stock is a SEPARATE document, but it arrives in the same spreadsheet —
+   * because that is how a supplier sends a price list, and asking an operator to
+   * maintain two files to describe one delivery is asking them to keep one of
+   * them wrong.
+   */
+  stock: ['stock', 'quantity', 'qty', 'onhand', 'stocklevel', 'inventory', 'available'],
 };
 
 /** Lowercase, strip everything that is not a letter or digit. "Compare-at Price" -> "compareatprice". */
@@ -120,6 +128,7 @@ export const detectMapping = (headers: readonly string[]): ColumnMapping => {
     'option2Value',
     'imageUrl',
     'imageAlt',
+    'stock',
   ];
 
   for (const field of order) {

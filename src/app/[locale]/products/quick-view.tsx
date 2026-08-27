@@ -55,6 +55,8 @@ export type QuickViewLabels = {
   readonly offerEnds: string;
   readonly chooseOption: string;
   readonly sku: string;
+  readonly inStock: string;
+  readonly outOfStock: string;
 };
 
 type QuickViewContextValue = {
@@ -157,6 +159,15 @@ const OptionPicker = ({
             const isSelected = selected.options.some(
               (option) => option.name === optionName && option.value === value,
             );
+            /*
+             * Sold out is NOT disabled.
+             *
+             * A combination that does not exist can never be bought, so it is
+             * disabled. One that exists but has run out is a thing the customer
+             * may well want to look at — the price, the photo, whether to wait —
+             * so it stays selectable and says so when chosen.
+             */
+            const soldOut = target !== undefined && target.availability === 'out_of_stock';
 
             /*
              * Inside a transient dialog the selection is CLIENT state, not a
@@ -176,10 +187,13 @@ const OptionPicker = ({
                   className={`rounded-full border px-3.5 py-1.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:text-faint disabled:line-through ${
                     isSelected
                       ? 'border-accent bg-accent/10 text-accent'
-                      : 'border-hairline text-ink hover:border-accent-dim hover:text-accent'
+                      : soldOut
+                        ? 'border-hairline text-faint hover:border-accent-dim'
+                        : 'border-hairline text-ink hover:border-accent-dim hover:text-accent'
                   }`}
                 >
                   {value}
+                  {soldOut && <span className="sr-only"> — {labels.outOfStock}</span>}
                 </button>
               </li>
             );
@@ -267,6 +281,19 @@ const Body = ({
               )}
             </p>
           )}
+
+          {/*
+            A status region: it changes when the customer picks another option,
+            and that change is exactly what they are asking about.
+          */}
+          <p
+            role="status"
+            className={`text-sm font-medium ${
+              selected.availability === 'in_stock' ? 'text-positive' : 'text-negative'
+            }`}
+          >
+            {selected.availability === 'in_stock' ? labels.inStock : labels.outOfStock}
+          </p>
 
           <p className="text-sm text-muted">
             <span className="text-faint">{labels.sku} </span>

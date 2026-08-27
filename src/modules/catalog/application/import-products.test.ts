@@ -3,7 +3,7 @@ import { englishOnly } from '@platform/locale';
 import { fromCents } from '@platform/money';
 import { err, ok, unwrapOrThrow } from '@platform/result';
 import { describe, expect, it, vi } from 'vitest';
-import type { ProductRepository, WorkbookReader } from '../contracts';
+import type { ProductRepository, StockWriter, WorkbookReader } from '../contracts';
 import type { Product } from '../domain/product';
 import { makeImportProducts } from './import-products';
 
@@ -48,11 +48,33 @@ const repository = (existing: Product[] = []) => {
 };
 
 let counter = 0;
-const importer = (repo: ProductRepository, workbook: WorkbookReader) => {
+
+/** Records what the sheet's stock column asked for, and can refuse a SKU. */
+const stockWriter = (refuse: readonly string[] = []) => {
+  const written: { sku: string; onHand: number }[] = [];
+  const writer: StockWriter = {
+    setLevels: async (levels) => {
+      const failures: { sku: string; reason: string }[] = [];
+      for (const level of levels) {
+        if (refuse.includes(level.sku)) failures.push({ sku: level.sku, reason: 'refused' });
+        else written.push({ ...level });
+      }
+      return failures;
+    },
+  };
+  return { writer, written };
+};
+
+const importer = (
+  repo: ProductRepository,
+  workbook: WorkbookReader,
+  stock: StockWriter = stockWriter().writer,
+) => {
   counter = 0;
   return makeImportProducts({
     repository: repo,
     reader: workbook,
+    stock,
     storeId: 'taz4tech',
     now: () => NOW,
     nextId: () => `PRODUCT${String(++counter).padStart(19, '0')}` as EntityId<'Product'>,
@@ -483,5 +505,151 @@ describe('a write that loses a race', () => {
         commit: true,
       }),
     ).rejects.toThrow('connection reset');
+  });
+});
+
+describe('the stock column', () => {
+  const STOCK_HEADERS = ['SKU', 'Title', 'Price', 'Stock'];
+
+  it('writes the stated level for each SKU on commit', async () => {
+    const { repo } = repository();
+    const stock = stockWriter();
+
+    const result = await importer(
+      repo,
+      reader([STOCK_HEADERS, ['A-1', 'Anker Cable', '19.99', '7']]),
+      stock.writer,
+    )({ file, commit: true });
+
+    if (!result.ok) return;
+    expect(stock.written).toEqual([{ sku: 'A-1', onHand: 7 }]);
+    expect(result.value.stockWritten).toBe(1);
+  });
+
+  it('writes nothing on a dry run', async () => {
+    // The importer's whole promise: a preview writes nothing, including stock.
+    const { repo } = repository();
+    const stock = stockWriter();
+
+    await importer(
+      repo,
+      reader([STOCK_HEADERS, ['A-1', 'Anker Cable', '19.99', '7']]),
+      stock.writer,
+    )({ file });
+
+    expect(stock.written).toEqual([]);
+  });
+
+  it('treats a BLANK cell as "not counted", not as zero', async () => {
+    /*
+     * The distinction the whole column rests on. Importing a blank as zero would
+     * take a catalogue off sale on the strength of an empty column — and the
+     * inventory module reads "no record" as available precisely so that an
+     * uncounted SKU stays buyable.
+     */
+    const { repo } = repository();
+    const stock = stockWriter();
+
+    await importer(
+      repo,
+      reader([STOCK_HEADERS, ['A-1', 'Anker Cable', '19.99', '']]),
+      stock.writer,
+    )({ file, commit: true });
+
+    expect(stock.written).toEqual([]);
+  });
+
+  it('does write an explicit zero, which means sold out', async () => {
+    const { repo } = repository();
+    const stock = stockWriter();
+
+    await importer(
+      repo,
+      reader([STOCK_HEADERS, ['A-1', 'Anker Cable', '19.99', '0']]),
+      stock.writer,
+    )({ file, commit: true });
+
+    expect(stock.written).toEqual([{ sku: 'A-1', onHand: 0 }]);
+  });
+
+  it('writes one level per variant row', async () => {
+    const { repo } = repository();
+    const stock = stockWriter();
+
+    await importer(
+      repo,
+      reader([
+        [...STOCK_HEADERS, 'Option1 Name', 'Option1 Value'],
+        ['A-1', 'Anker Cable', '19.99', '3', 'Length', '1m'],
+        ['A-2', 'Anker Cable', '24.50', '5', 'Length', '2m'],
+      ]),
+      stock.writer,
+    )({ file, commit: true });
+
+    expect(stock.written).toEqual([
+      { sku: 'A-1', onHand: 3 },
+      { sku: 'A-2', onHand: 5 },
+    ]);
+  });
+
+  it('rejects an unreadable quantity as a row problem', async () => {
+    const { repo } = repository();
+    const result = await importer(
+      repo,
+      reader([STOCK_HEADERS, ['A-1', 'Anker Cable', '19.99', 'a few']]),
+    )({ file });
+
+    if (!result.ok) return;
+    expect(result.value.plan.rowProblems).toEqual([
+      { row: 2, field: 'stock', problem: { tag: 'unparsable_number', value: 'a few' } },
+    ]);
+  });
+
+  it('does not set stock for a product the database refused', async () => {
+    /*
+     * Order matters: a level written for a product that did not land is a count
+     * for something not in the catalogue, and nothing would ever reconcile it.
+     */
+    const { repo } = repository();
+    const stock = stockWriter();
+    const refusing: ProductRepository = {
+      ...repo,
+      save: vi.fn(async () => err({ tag: 'sku_taken' as const, sku: 'A-1' })),
+    };
+
+    const result = await importer(
+      refusing,
+      reader([STOCK_HEADERS, ['A-1', 'Anker Cable', '19.99', '7']]),
+      stock.writer,
+    )({ file, commit: true });
+
+    if (!result.ok) return;
+    expect(stock.written).toEqual([]);
+    expect(result.value.stockWritten).toBe(0);
+  });
+
+  it('reports a stock write it could not make, without failing the import', async () => {
+    const { repo } = repository();
+    const stock = stockWriter(['A-1']);
+
+    const result = await importer(
+      repo,
+      reader([STOCK_HEADERS, ['A-1', 'Anker Cable', '19.99', '7']]),
+      stock.writer,
+    )({ file, commit: true });
+
+    if (!result.ok) return;
+    // The product landed; only its count did not, and the receipt says so.
+    expect(result.value.written).toBe(1);
+    expect(result.value.stockWritten).toBe(0);
+    expect(result.value.stockFailures).toEqual([{ sku: 'A-1', reason: 'refused' }]);
+  });
+
+  it('does not call the writer at all when the sheet has no stock column', async () => {
+    const setLevels = vi.fn(async () => []);
+    const { repo } = repository();
+
+    await importer(repo, reader(SHEET), { setLevels })({ file, commit: true });
+    expect(setLevels).not.toHaveBeenCalled();
   });
 });

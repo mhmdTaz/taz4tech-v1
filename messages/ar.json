@@ -49,7 +49,10 @@
     "quickViewOf": "عرض سريع: {title}",
     "close": "إغلاق",
     "fullDetails": "عرض التفاصيل الكاملة",
-    "quickViewHint": "ملخّص. الصفحة الكاملة تحتوي على المواصفات وجميع الصور."
+    "quickViewHint": "ملخّص. الصفحة الكاملة تحتوي على المواصفات وجميع الصور.",
+    "inStock": "متوفر",
+    "outOfStock": "غير متوفر",
+    "unitsLeft": "بقي {count} فقط"
   },
   "collections": {
     "title": "المجموعات",

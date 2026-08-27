@@ -40,8 +40,12 @@ const product = (overrides: Partial<Product> = {}): Product => ({
   ...overrides,
 });
 
-const view = (overrides: Partial<Product> = {}, locale: 'en' | 'ar' | 'fr' = 'en') =>
-  toQuickView(product(overrides), { locale, now: NOW });
+const view = (
+  overrides: Partial<Product> = {},
+  locale: 'en' | 'ar' | 'fr' = 'en',
+  availability?: ReadonlyMap<string, 'in_stock' | 'out_of_stock'>,
+) =>
+  toQuickView(product(overrides), { locale, now: NOW, ...(availability ? { availability } : {}) });
 
 describe('toQuickView', () => {
   it('carries the identity a dialog needs', () => {
@@ -215,6 +219,54 @@ describe('toQuickView', () => {
 
       expect(result.variants[0]?.compareAtCents).toBe(2499);
       expect(result.variants[1]?.compareAtCents).toBeNull();
+    });
+  });
+
+  describe('availability', () => {
+    const twoSizes = {
+      optionNames: ['Size'],
+      variants: [
+        variant({ sku: 'S', options: [{ name: 'Size', value: 'Small' }], price: usd(1999) }),
+        variant({ sku: 'L', options: [{ name: 'Size', value: 'Large' }], price: usd(2999) }),
+      ],
+    };
+
+    it('reads a SKU with no entry as in stock', () => {
+      // The catalogue does not know what stock is. Absent means uncounted, which
+      // the inventory module treats as available — not as sold out.
+      expect(view().variants[0]?.availability).toBe('in_stock');
+    });
+
+    it('carries what the caller supplies, per variant', () => {
+      const result = view(twoSizes, 'en', new Map([['S', 'out_of_stock']]));
+
+      expect(result.variants[0]?.availability).toBe('out_of_stock');
+      expect(result.variants[1]?.availability).toBe('in_stock');
+    });
+
+    it('opens on the cheapest variant that can actually be bought', () => {
+      // Opening on a sold-out variant quotes a price the customer cannot have
+      // and makes the dialog's first impression a disabled button.
+      const result = view(twoSizes, 'en', new Map([['S', 'out_of_stock']]));
+      expect(result.defaultSku).toBe('L');
+    });
+
+    it('still prefers the cheapest when several are available', () => {
+      const result = view(twoSizes, 'en', new Map());
+      expect(result.defaultSku).toBe('S');
+    });
+
+    it('falls back to the cheapest overall when nothing is in stock', () => {
+      // The price shown must still match the tile the customer clicked.
+      const result = view(
+        twoSizes,
+        'en',
+        new Map([
+          ['S', 'out_of_stock'],
+          ['L', 'out_of_stock'],
+        ]),
+      );
+      expect(result.defaultSku).toBe('S');
     });
   });
 

@@ -36,6 +36,7 @@ export const FIELD_LABELS: Record<ImportField, string> = {
   option2Value: 'Option 2 value',
   imageUrl: 'Image URL',
   imageAlt: 'Image alt text',
+  stock: 'Stock',
 };
 
 const localeName = (locale: string): string =>
