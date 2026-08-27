@@ -163,13 +163,28 @@ decoder RCE. AVIF is disabled as part of that patch, so `images.formats` lists
 WebP only, and Lighthouse's `modern-image-formats` audit is turned off because it
 would penalise the app for the security fix.
 
-**Cache Components** is on, so nothing is cached unless a boundary says so — the
-right default for a storefront where a stale price is worse than a slower render.
-It also forbids reading a dynamic source outside `<Suspense>`. next-intl resolves
-the locale through `headers()`, which counts, so both the layout and the page
-call `setRequestLocale(locale)` to supply it from the route param instead. Without
-that call every route drops from `◐` (partial prerender) to `ƒ` (dynamic) and the
-static shell is lost — silently, with a green build.
+**Cache Components is OFF**, reversing the plan's original choice — on evidence.
+Partial prerendering flushes a shell before the dynamic part runs, so on a product
+page the HTTP status is committed as 200 before the database says whether the
+product exists. Measured here:
+
+```
+cacheComponents: true   ->  200 + "not found" body   (a SOFT 404)
+cacheComponents: false  ->  404
+```
+
+A storefront that answers 200 for every archived or mistyped product URL teaches
+search engines that its 404s are real pages. Neither escape hatch works:
+`dynamic: 'force-dynamic'` is rejected as incompatible, and `instant: false`
+controls *prefetching*, not response blocking — it silences the build error while
+leaving the soft 404 in place, which is worse than no fix. The plan's actual goal
+survives: it wanted caching opt-in "because a stale price is worse than a slower
+render", and Next 15+ already defaults to uncached data, so this costs the
+prerendered shell rather than price freshness.
+
+`setRequestLocale(locale)` is still called in every layout and page. next-intl
+otherwise resolves the locale through `headers()`, which makes the route dynamic
+for a reason that has nothing to do with the data it renders.
 
 **`middleware.ts` is `proxy.ts`** in Next 16. The old name still works but is
 deprecated.
@@ -184,6 +199,34 @@ than slicing an ISO string, so "Tuesday's deliveries" means Tuesday in Beirut
 regardless of where the server runs.
 
 ---
+
+## The storefront
+
+```
+/[locale]/products             listing, cursor-paginated
+/[locale]/products/[slug]      product detail
+```
+
+**Variant selection is a URL, not client state.** Each option value is a link
+setting `?variant=<sku>`, so every combination is shareable, crawlable and works
+with JavaScript disabled or still downloading. An unavailable combination renders
+as disabled rather than disappearing — a customer who picks Silver should see
+that 512GB does not exist, not watch an option vanish.
+
+**The canonical URL never points at a variant.** Every variant renders
+substantially the same page; letting them compete as separate URLs splits the
+ranking signals between them.
+
+**JSON-LD is built by a tested pure function**, not assembled in the component.
+A multi-variant product emits `AggregateOffer` with the real low/high — a single
+`Offer` would advertise a price most buyers cannot get, which is the mismatch
+Merchant Center suspends accounts over. Availability is passed in rather than
+assumed, so wiring real stock in Phase 2 is a parameter change in one place.
+
+Demo fixtures live in `pnpm seed:demo`, deliberately separate from `pnpm seed`:
+store settings are real configuration, three fake laptops are not. The fixtures
+cover the awkward shapes on purpose — an incomplete variant matrix, a live offer,
+a product with no imagery, and a draft that must stay hidden.
 
 ## Open decisions
 

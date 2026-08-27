@@ -14,5 +14,27 @@
       "contact": "Contact",
       "registry": "Registre du commerce"
     }
+  },
+  "products": {
+    "title": "Produits",
+    "subtitle": "L'électronique, livrée partout au Liban. Paiement à la livraison.",
+    "metaTitle": "Produits",
+    "metaDescription": "Parcourez ordinateurs portables, téléphones et accessoires. Paiement à la livraison partout au Liban.",
+    "loading": "Chargement des produits…",
+    "empty": "Aucun produit pour le moment. Importez votre catalogue pour le voir ici.",
+    "loadFailed": "Impossible de charger les produits.",
+    "loadMore": "Afficher plus",
+    "pagination": "Pagination",
+    "priceFrom": "À partir de {price}",
+    "priceWas": "Prix habituel",
+    "priceNow": "Prix soldé",
+    "sale": "Promo",
+    "offerEnds": "L'offre se termine le {date}",
+    "specifications": "Caractéristiques",
+    "chooseOption": "Choisir {option}",
+    "sku": "Référence",
+    "gallery": "Images du produit",
+    "breadcrumb": "Fil d'Ariane",
+    "notFoundTitle": "Produit introuvable"
   }
 }

@@ -8,11 +8,33 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
 
   /**
-   * Caching is opt-in in Next 16. Nothing is cached unless a "use cache" boundary
-   * says so, which is the safe default for a storefront where a stale price or a
-   * stale stock count is worse than a slower render.
+   * OFF, deliberately — this reverses the plan's original choice, on evidence.
+   *
+   * Cache Components (partial prerendering) flushes a prerendered shell before
+   * the dynamic part has run. On a product page the 404 decision needs a
+   * database read, so the HTTP status is already committed as 200 by the time
+   * notFound() fires. Measured on this codebase:
+   *
+   *   cacheComponents: true   ->  200 + "not found" body   (a SOFT 404)
+   *   cacheComponents: false  ->  404
+   *
+   * A storefront whose archived and mistyped product URLs all answer 200 teaches
+   * search engines that its 404s are real pages. For a catalogue that churns —
+   * products archived, SKUs discontinued — that is continuous damage, in a
+   * vertical where organic reach is already hard-won.
+   *
+   * Neither escape hatch works: `dynamic: 'force-dynamic'` is rejected outright
+   * as incompatible with cacheComponents, and `instant: false` controls
+   * PREFETCHING rather than response blocking — it silences the build error
+   * while leaving the soft 404 in place, which is worse than no fix at all.
+   *
+   * The plan's actual goal is preserved. It wanted caching opt-in "because a
+   * stale price is worse than a slower render", and Next 15+ already defaults to
+   * uncached data — so turning this off costs the prerendered shell, not price
+   * freshness. Revisit with "use cache" plus tag-based invalidation once product
+   * pages are cacheable on purpose rather than by default.
    */
-  cacheComponents: true,
+  cacheComponents: false,
 
   images: {
     /**

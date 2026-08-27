@@ -165,14 +165,35 @@ export const slugify = (input: string): string =>
 const optionKey = (options: readonly VariantOption[]): string =>
   options.map((o) => `${o.name}=${o.value}`).join('|');
 
-const validateVariant = (
-  variant: Variant,
-  index: number,
-  optionNames: readonly string[],
-  now: Date,
-): ProductError | null => {
-  if (variant.sku.trim().length === 0) return { tag: 'sku_empty', index };
+/** The offer rules, which are legal requirements rather than display preferences. */
+const validateOffer = (variant: Variant, now: Date): ProductError | null => {
+  if (variant.compareAtPrice === null) {
+    // An end date with nothing to end is a half-removed offer; rejecting it
+    // stops "the discount is gone but the banner is still up".
+    return variant.offerEndsAt === null
+      ? null
+      : { tag: 'offer_end_date_without_offer', sku: variant.sku };
+  }
 
+  // A "was" price at or below the current price is not a discount; showing one
+  // is a misleading commercial claim, not a display bug.
+  if (compare(variant.compareAtPrice, variant.price) <= 0) {
+    return { tag: 'compare_at_not_higher', sku: variant.sku };
+  }
+  // Lebanese consumer protection law requires every special offer to carry an
+  // expiry date.
+  if (variant.offerEndsAt === null) return { tag: 'offer_without_end_date', sku: variant.sku };
+  if (variant.offerEndsAt.getTime() <= now.getTime()) {
+    return { tag: 'offer_end_date_in_past', sku: variant.sku };
+  }
+  return null;
+};
+
+/** A variant's options must match the product's declared axes exactly, in order. */
+const validateVariantOptions = (
+  variant: Variant,
+  optionNames: readonly string[],
+): ProductError | null => {
   if (variant.options.length !== optionNames.length) {
     return { tag: 'variant_options_mismatch', sku: variant.sku, expected: optionNames };
   }
@@ -184,25 +205,77 @@ const validateVariant = (
       return { tag: 'variant_option_value_empty', sku: variant.sku, name: option.name };
     }
   }
+  return null;
+};
+
+const validateVariant = (
+  variant: Variant,
+  index: number,
+  optionNames: readonly string[],
+  now: Date,
+): ProductError | null => {
+  if (variant.sku.trim().length === 0) return { tag: 'sku_empty', index };
+
+  const options = validateVariantOptions(variant, optionNames);
+  if (options !== null) return options;
 
   if (isNegative(variant.price)) return { tag: 'price_negative', sku: variant.sku };
 
-  if (variant.compareAtPrice !== null) {
-    // A "was" price at or below the current price is not a discount; showing one
-    // is a misleading commercial claim, not a display bug.
-    if (compare(variant.compareAtPrice, variant.price) <= 0) {
-      return { tag: 'compare_at_not_higher', sku: variant.sku };
-    }
-    if (variant.offerEndsAt === null) return { tag: 'offer_without_end_date', sku: variant.sku };
-    if (variant.offerEndsAt.getTime() <= now.getTime()) {
-      return { tag: 'offer_end_date_in_past', sku: variant.sku };
-    }
-  } else if (variant.offerEndsAt !== null) {
-    // An end date with nothing to end is a half-removed offer; rejecting it
-    // stops "the discount is gone but the banner is still up".
-    return { tag: 'offer_end_date_without_offer', sku: variant.sku };
-  }
+  return validateOffer(variant, now);
+};
 
+const validateOptionNames = (optionNames: readonly string[]): ProductError | null => {
+  const seen = new Set<string>();
+  for (const name of optionNames) {
+    if (name.trim().length === 0) return { tag: 'option_name_empty' };
+    if (seen.has(name)) return { tag: 'option_names_duplicated', name };
+    seen.add(name);
+  }
+  return null;
+};
+
+const validateVariants = (
+  variants: readonly Variant[],
+  optionNames: readonly string[],
+  now: Date,
+): ProductError | null => {
+  if (variants.length === 0) return { tag: 'no_variants' };
+
+  const seenSkus = new Set<string>();
+  const seenCombinations = new Set<string>();
+
+  for (const [index, variant] of variants.entries()) {
+    const problem = validateVariant(variant, index, optionNames, now);
+    if (problem !== null) return problem;
+
+    if (seenSkus.has(variant.sku)) return { tag: 'sku_duplicated', sku: variant.sku };
+    seenSkus.add(variant.sku);
+
+    const combination = optionKey(variant.options);
+    if (seenCombinations.has(combination)) {
+      return { tag: 'variant_combination_duplicated', combination };
+    }
+    seenCombinations.add(combination);
+  }
+  return null;
+};
+
+const validateMedia = (media: readonly Media[]): ProductError | null => {
+  for (const [index, item] of media.entries()) {
+    if (item.url.trim().length === 0) return { tag: 'media_url_empty', index };
+    const alt = createLocalizedText(item.alt);
+    if (!alt.ok) return { tag: 'media_alt_invalid', index, reason: alt.error };
+  }
+  return null;
+};
+
+const validateSpecs = (specs: readonly Spec[]): ProductError | null => {
+  for (const [index, spec] of specs.entries()) {
+    const name = createLocalizedText(spec.name);
+    if (!name.ok) return { tag: 'spec_invalid', index, reason: name.error };
+    const value = createLocalizedText(spec.value);
+    if (!value.ok) return { tag: 'spec_invalid', index, reason: value.error };
+  }
   return null;
 };
 
@@ -212,6 +285,11 @@ const validateVariant = (
  *
  * `now` is a parameter rather than a call to Date.now() so that offer expiry is
  * testable without waiting and without a global clock inside the domain.
+ *
+ * Reads as a checklist because the checks are extracted: each validator owns one
+ * rule and returns the first thing wrong with it, and this function only decides
+ * the ORDER they run in. That order is itself meaningful — the slug and the text
+ * are cheap, the variant matrix is not.
  */
 export const createProduct = (input: Product, now: Date): Result<Product, ProductError> => {
   if (!isValidSlug(input.slug)) return err({ tag: 'slug_invalid', slug: input.slug });
@@ -222,43 +300,12 @@ export const createProduct = (input: Product, now: Date): Result<Product, Produc
   const description = createLocalizedText(input.description);
   if (!description.ok) return err({ tag: 'description_invalid', reason: description.error });
 
-  const seenOptionNames = new Set<string>();
-  for (const name of input.optionNames) {
-    if (name.trim().length === 0) return err({ tag: 'option_name_empty' });
-    if (seenOptionNames.has(name)) return err({ tag: 'option_names_duplicated', name });
-    seenOptionNames.add(name);
-  }
-
-  if (input.variants.length === 0) return err({ tag: 'no_variants' });
-
-  const seenSkus = new Set<string>();
-  const seenCombinations = new Set<string>();
-  for (const [index, variant] of input.variants.entries()) {
-    const problem = validateVariant(variant, index, input.optionNames, now);
-    if (problem !== null) return err(problem);
-
-    if (seenSkus.has(variant.sku)) return err({ tag: 'sku_duplicated', sku: variant.sku });
-    seenSkus.add(variant.sku);
-
-    const combination = optionKey(variant.options);
-    if (seenCombinations.has(combination)) {
-      return err({ tag: 'variant_combination_duplicated', combination });
-    }
-    seenCombinations.add(combination);
-  }
-
-  for (const [index, item] of input.media.entries()) {
-    if (item.url.trim().length === 0) return err({ tag: 'media_url_empty', index });
-    const alt = createLocalizedText(item.alt);
-    if (!alt.ok) return err({ tag: 'media_alt_invalid', index, reason: alt.error });
-  }
-
-  for (const [index, spec] of input.specs.entries()) {
-    const name = createLocalizedText(spec.name);
-    if (!name.ok) return err({ tag: 'spec_invalid', index, reason: name.error });
-    const value = createLocalizedText(spec.value);
-    if (!value.ok) return err({ tag: 'spec_invalid', index, reason: value.error });
-  }
+  const problem =
+    validateOptionNames(input.optionNames) ??
+    validateVariants(input.variants, input.optionNames, now) ??
+    validateMedia(input.media) ??
+    validateSpecs(input.specs);
+  if (problem !== null) return err(problem);
 
   return ok({
     ...input,

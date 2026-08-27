@@ -14,5 +14,27 @@
       "contact": "Contact",
       "registry": "Commercial registry"
     }
+  },
+  "products": {
+    "title": "Products",
+    "subtitle": "Electronics, delivered across Lebanon. Cash on delivery.",
+    "metaTitle": "Products",
+    "metaDescription": "Browse laptops, phones and accessories. Cash on delivery across Lebanon.",
+    "loading": "Loading products…",
+    "empty": "No products yet. Import your catalogue to see it here.",
+    "loadFailed": "Products could not be loaded.",
+    "loadMore": "Show more",
+    "pagination": "Pagination",
+    "priceFrom": "From {price}",
+    "priceWas": "Regular price",
+    "priceNow": "Sale price",
+    "sale": "Sale",
+    "offerEnds": "Offer ends {date}",
+    "specifications": "Specifications",
+    "chooseOption": "Choose {option}",
+    "sku": "SKU",
+    "gallery": "Product images",
+    "breadcrumb": "Breadcrumb",
+    "notFoundTitle": "Product not found"
   }
 }
