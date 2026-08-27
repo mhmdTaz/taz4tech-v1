@@ -230,6 +230,43 @@ store settings are real configuration, three fake laptops are not. The fixtures
 cover the awkward shapes on purpose — an incomplete variant matrix, a live offer,
 a product with no imagery, and a draft that must stay hidden.
 
+## Search and facets
+
+```
+/en/products?q=laptop&brand=Lenovo&opt.Colour=Black&min=100&max=500
+```
+
+**Every filter is a link, and every filtered view is a URL.** Nothing needs
+JavaScript: the search box is a plain GET form and each facet value is an anchor.
+That makes filtered views shareable, bookmarkable and crawlable, and it means the
+filters work before the JS bundle has arrived.
+
+**Cross-language synonyms are the point.** The catalogue arrives from suppliers
+in English; a large share of customers search in Arabic. Without expansion,
+"لابتوب" returns nothing at all from a catalogue full of laptops — not a ranking
+problem, an empty shop. Arabic is normalised as well as expanded: أ إ آ all fold
+to ا, ة folds to ه, and diacritics are stripped, because "شاشه" and "شاشة" are
+the same word typed two ways rather than a typo.
+
+**A facet's counts ignore that facet's own selection.** Choosing Lenovo must not
+collapse the brand list to Lenovo alone, or the customer cannot switch to Dell
+without first clearing the filter. Every *other* facet does narrow, which is what
+makes browsing feel responsive.
+
+**A price range requires ONE variant to satisfy both bounds.** A product with a
+$200 and a $900 variant does not match "between $400 and $500" — a naive filter
+matches it because one variant clears the lower bound and a different one clears
+the upper, showing a product with nothing in the range asked for.
+
+Search rides a MongoDB text index over a `searchText` field derived on write.
+`default_language: 'none'` turns stemming off deliberately: the stemmers are
+per-language, Arabic is not among them, and normalisation has already folded both
+sides into the same shape.
+
+Relevance ranking is **not** implemented — results are newest-first, cursor
+paginated like the rest of the listing. Recall matters more than ordering at this
+catalogue size, and one pagination model is worth keeping.
+
 ## The Excel importer
 
 ```bash

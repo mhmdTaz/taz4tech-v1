@@ -41,6 +41,7 @@ const repositoryReturning = (value: Product | null) => {
     findById: vi.fn(),
     findBySku: vi.fn(),
     findBySlugs: vi.fn().mockResolvedValue([]),
+    search: vi.fn(),
     list: vi.fn(),
     save: vi.fn(),
   };
@@ -135,6 +136,7 @@ describe('getProductBySlug', () => {
       findById: vi.fn(),
       findBySku: vi.fn(),
       findBySlugs: vi.fn().mockResolvedValue([]),
+      search: vi.fn(),
       list: vi.fn(),
       save: vi.fn(),
     };

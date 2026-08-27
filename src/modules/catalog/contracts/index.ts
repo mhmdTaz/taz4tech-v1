@@ -25,6 +25,41 @@ export type ListProductsQuery = {
   readonly cursor?: string;
 };
 
+/** A facet value and how many products carry it. */
+export type FacetValue = {
+  readonly value: string;
+  readonly count: number;
+};
+
+export type OptionFacet = {
+  readonly name: string;
+  readonly values: readonly FacetValue[];
+};
+
+export type Facets = {
+  readonly brands: readonly FacetValue[];
+  readonly options: readonly OptionFacet[];
+  /** Null when nothing matched, so the price slider has nothing to bound. */
+  readonly priceRange: { readonly minCents: number; readonly maxCents: number } | null;
+};
+
+export type ProductFilters = {
+  /** Raw customer input; the repository expands and normalises it. */
+  readonly search?: string;
+  readonly brands?: readonly string[];
+  readonly options?: readonly { readonly name: string; readonly values: readonly string[] }[];
+  readonly priceMinCents?: number;
+  readonly priceMaxCents?: number;
+};
+
+export type SearchProductsQuery = ListProductsQuery & {
+  readonly filters: ProductFilters;
+};
+
+export type SearchResult = ProductPage & {
+  readonly facets: Facets;
+};
+
 /**
  * Reads a spreadsheet into rows of text.
  *
@@ -51,5 +86,14 @@ export interface ProductRepository {
    */
   findBySlugs(storeId: string, slugs: readonly string[]): Promise<Product[]>;
   list(query: ListProductsQuery): Promise<ProductPage>;
+  /**
+   * A page of results plus the facet counts for the same query.
+   *
+   * One aggregation, not one query per facet. Each facet's counts deliberately
+   * IGNORE that facet's own selection — otherwise choosing "Lenovo" collapses
+   * the brand list to Lenovo alone and the customer cannot switch to Dell
+   * without clearing the filter first.
+   */
+  search(query: SearchProductsQuery): Promise<SearchResult>;
   save(product: Product): Promise<void>;
 }

@@ -12,6 +12,7 @@ import { type GetProductBySlug, makeGetProductBySlug } from './application/get-p
 import { type ImportProducts, makeImportProducts } from './application/import-products';
 import { type ListProducts, makeListProducts } from './application/list-products';
 import { makeSaveProduct, type SaveProduct } from './application/save-product';
+import { makeSearchProducts, type SearchProducts } from './application/search-products';
 import {
   createMongoProductRepository,
   ensureProductIndexes,
@@ -60,7 +61,23 @@ export {
   productUrl,
 } from './application/product-structured-data';
 export type { SaveProduct, SaveProductError } from './application/save-product';
-export type { ListProductsQuery, ProductPage, ProductRepository } from './contracts';
+export type {
+  SearchProducts,
+  SearchProductsError,
+  SearchProductsInput,
+} from './application/search-products';
+export { MAX_FILTER_VALUES } from './application/search-products';
+export type {
+  Facets,
+  FacetValue,
+  ListProductsQuery,
+  OptionFacet,
+  ProductFilters,
+  ProductPage,
+  ProductRepository,
+  SearchProductsQuery,
+  SearchResult,
+} from './contracts';
 export type {
   Media,
   Product,
@@ -84,12 +101,14 @@ export {
   priceRange,
   slugify,
 } from './domain/product';
+export { expandSearchTerms, isSearchable, normaliseSearchText } from './domain/search';
 
 export type CatalogModule = {
   readonly getProductBySlug: GetProductBySlug;
   readonly listProducts: ListProducts;
   readonly saveProduct: SaveProduct;
   readonly importProducts: ImportProducts;
+  readonly searchProducts: SearchProducts;
   readonly ensureIndexes: () => Promise<void>;
 };
 
@@ -106,6 +125,7 @@ export const createCatalogModule = (deps: {
     getProductBySlug: makeGetProductBySlug(wiring),
     listProducts: makeListProducts(wiring),
     saveProduct: makeSaveProduct({ ...wiring, now: deps.now }),
+    searchProducts: makeSearchProducts(wiring),
     importProducts: makeImportProducts({
       ...wiring,
       reader: createXlsxWorkbookReader(),

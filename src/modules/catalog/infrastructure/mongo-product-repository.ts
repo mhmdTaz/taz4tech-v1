@@ -19,8 +19,19 @@ import type { LocalizedText } from '@platform/locale';
 import { fromCents } from '@platform/money';
 import type { Collection, Db } from 'mongodb';
 import { z } from 'zod';
-import type { ListProductsQuery, ProductPage, ProductRepository } from '../contracts';
+import type {
+  Facets,
+  FacetValue,
+  ListProductsQuery,
+  OptionFacet,
+  ProductFilters,
+  ProductPage,
+  ProductRepository,
+  SearchProductsQuery,
+  SearchResult,
+} from '../contracts';
 import { createProduct, PRODUCT_STATUSES, type Product, type ProductId } from '../domain/product';
+import { expandSearchTerms, normaliseSearchText } from '../domain/search';
 
 export const PRODUCTS_COLLECTION = 'products';
 
@@ -74,6 +85,14 @@ const ProductDocument = z.object({
   ),
   createdAt: z.date(),
   updatedAt: z.date(),
+  /**
+   * Derived on write: every searchable string, normalised.
+   *
+   * Optional in the schema because documents written before this field existed
+   * are still valid products — refusing to load them would take the catalogue
+   * down for a search feature.
+   */
+  searchText: z.string().optional(),
 });
 
 type ProductDocumentShape = z.infer<typeof ProductDocument>;
@@ -151,6 +170,34 @@ const toDomain = (raw: unknown, context: string): Product => {
   return product.value;
 };
 
+/**
+ * Everything a customer might reasonably type, in one normalised string.
+ *
+ * Built on write rather than matched at read time: a regex over several fields
+ * cannot use an index, and the text index this feeds is what keeps search off a
+ * collection scan.
+ */
+const buildSearchText = (product: Product): string => {
+  const parts: string[] = [product.slug];
+  if (product.brand !== null) parts.push(product.brand);
+
+  for (const text of [product.title, product.description]) {
+    for (const value of Object.values(text)) if (typeof value === 'string') parts.push(value);
+  }
+  for (const variant of product.variants) {
+    parts.push(variant.sku);
+    if (variant.barcode !== null) parts.push(variant.barcode);
+    for (const option of variant.options) parts.push(option.name, option.value);
+  }
+  for (const spec of product.specs) {
+    for (const text of [spec.name, spec.value]) {
+      for (const value of Object.values(text)) if (typeof value === 'string') parts.push(value);
+    }
+  }
+
+  return normaliseSearchText(parts.join(' '));
+};
+
 const toDocument = (product: Product): ProductDocumentShape => ({
   _id: product.id,
   storeId: product.storeId,
@@ -176,7 +223,63 @@ const toDocument = (product: Product): ProductDocumentShape => ({
   specs: product.specs.map((spec) => ({ ...spec })),
   createdAt: product.createdAt,
   updatedAt: product.updatedAt,
+  searchText: buildSearchText(product),
 });
+
+/**
+ * Filter fragments, one per facet, so each can be applied or omitted.
+ *
+ * Keyed by facet so a facet's own selection can be excluded when counting it —
+ * see the note on ProductRepository.search.
+ */
+const filterFragments = (filters: ProductFilters): Map<string, Record<string, unknown>> => {
+  const fragments = new Map<string, Record<string, unknown>>();
+
+  if (filters.brands !== undefined && filters.brands.length > 0) {
+    fragments.set('brand', { brand: { $in: [...filters.brands] } });
+  }
+
+  const min = filters.priceMinCents;
+  const max = filters.priceMaxCents;
+  if (min !== undefined || max !== undefined) {
+    const bounds: Record<string, number> = {};
+    if (min !== undefined) bounds.$gte = min;
+    if (max !== undefined) bounds.$lte = max;
+    // elemMatch, not a bare path: without it a product with a $50 variant and a
+    // $500 variant matches "under $100" on one variant and "over $400" on the
+    // other, and appears under both filters at once.
+    fragments.set('price', { variants: { $elemMatch: { 'price.cents': bounds } } });
+  }
+
+  for (const option of filters.options ?? []) {
+    if (option.values.length === 0) continue;
+    fragments.set(`option:${option.name}`, {
+      variants: {
+        $elemMatch: {
+          options: { $elemMatch: { name: option.name, value: { $in: [...option.values] } } },
+        },
+      },
+    });
+  }
+
+  return fragments;
+};
+
+/** Every fragment except the named one, combined. */
+const combine = (
+  fragments: ReadonlyMap<string, Record<string, unknown>>,
+  except?: string,
+): Record<string, unknown> => {
+  const clauses: Record<string, unknown>[] = [];
+  for (const [key, fragment] of fragments) if (key !== except) clauses.push(fragment);
+  return clauses.length === 0 ? {} : { $and: clauses };
+};
+
+const toFacetValues = (rows: { _id: unknown; count: number }[]): FacetValue[] =>
+  rows
+    .filter((row): row is { _id: string; count: number } => typeof row._id === 'string')
+    .map((row) => ({ value: row._id, count: row.count }))
+    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
 
 export const createMongoProductRepository = (db: Db): ProductRepository => {
   const collection: Collection<ProductDocumentShape> = db.collection(PRODUCTS_COLLECTION);
@@ -231,6 +334,149 @@ export const createMongoProductRepository = (db: Db): ProductRepository => {
       };
     },
 
+    async search(query: SearchProductsQuery): Promise<SearchResult> {
+      const fragments = filterFragments(query.filters);
+
+      /*
+       * The base match is everything a facet must NOT ignore: the tenant, the
+       * status, and the search terms. $text has to live in the first stage of
+       * the pipeline, which is why it belongs here rather than in a fragment.
+       */
+      const base: Record<string, unknown> = { storeId: query.storeId };
+      if (query.status !== undefined) base.status = query.status;
+
+      const search = query.filters.search;
+      if (search !== undefined && search.trim().length > 0) {
+        const { terms } = expandSearchTerms(search);
+        // Space-separated terms are OR in a $text search, which is what synonym
+        // expansion wants: any of them is a hit.
+        if (terms.length > 0) base.$text = { $search: terms.join(' ') };
+      }
+
+      const optionNames = [...new Set((query.filters.options ?? []).map((o) => o.name))];
+
+      const pageMatch = combine(fragments);
+      const cursorClause = query.cursor === undefined ? {} : { _id: { $lt: query.cursor } };
+
+      const optionBranches: Record<string, unknown[]> = {};
+      for (const name of optionNames.length > 0 ? optionNames : ['__none__']) {
+        if (name === '__none__') continue;
+        optionBranches[`option_${name}`] = [
+          { $match: combine(fragments, `option:${name}`) },
+          { $unwind: '$variants' },
+          { $unwind: '$variants.options' },
+          { $match: { 'variants.options.name': name } },
+          { $group: { _id: '$variants.options.value', count: { $addToSet: '$_id' } } },
+          { $project: { count: { $size: '$count' } } },
+        ];
+      }
+
+      const [result] = await collection
+        .aggregate<Record<string, unknown[]>>([
+          { $match: base },
+          {
+            $facet: {
+              page: [
+                { $match: { ...pageMatch, ...cursorClause } },
+                { $sort: { _id: -1 } },
+                { $limit: query.limit + 1 },
+              ],
+              brands: [
+                { $match: combine(fragments, 'brand') },
+                { $group: { _id: '$brand', count: { $sum: 1 } } },
+              ],
+              /*
+               * Counts for every option axis that is NOT currently filtered.
+               *
+               * A selected axis gets its own branch below, computed with its own
+               * filter removed so the customer can switch values. Everything
+               * else is counted with all filters applied, so choosing a brand
+               * narrows the colours — which is what makes faceted browsing feel
+               * like it is responding.
+               */
+              optionsOther: [
+                { $match: pageMatch },
+                { $unwind: '$variants' },
+                { $unwind: '$variants.options' },
+                {
+                  $group: {
+                    _id: { name: '$variants.options.name', value: '$variants.options.value' },
+                    // addToSet on the product id, so a product with three Black
+                    // variants counts ONCE against Black rather than three times.
+                    products: { $addToSet: '$_id' },
+                  },
+                },
+                { $project: { count: { $size: '$products' } } },
+              ],
+              price: [
+                { $match: combine(fragments, 'price') },
+                { $unwind: '$variants' },
+                {
+                  $group: {
+                    _id: null,
+                    minCents: { $min: '$variants.price.cents' },
+                    maxCents: { $max: '$variants.price.cents' },
+                  },
+                },
+              ],
+              ...optionBranches,
+            },
+          },
+        ])
+        .toArray();
+
+      const branch = (name: string): unknown[] => (result?.[name] ?? []) as unknown[];
+
+      const docs = branch('page') as ProductDocumentShape[];
+      const hasMore = docs.length > query.limit;
+      const page = hasMore ? docs.slice(0, query.limit) : docs;
+
+      const otherRows = branch('optionsOther') as {
+        _id: { name?: unknown; value?: unknown };
+        count: number;
+      }[];
+
+      const byName = new Map<string, { _id: unknown; count: number }[]>();
+      for (const row of otherRows) {
+        const name = row._id?.name;
+        const value = row._id?.value;
+        if (typeof name !== 'string' || typeof value !== 'string') continue;
+        // A selected axis is counted by its own branch instead, which ignores
+        // its own filter; drop it from the generic results.
+        if (optionNames.includes(name)) continue;
+        const rows = byName.get(name) ?? [];
+        rows.push({ _id: value, count: row.count });
+        byName.set(name, rows);
+      }
+
+      for (const name of optionNames) {
+        byName.set(name, branch(`option_${name}`) as { _id: unknown; count: number }[]);
+      }
+
+      const options: OptionFacet[] = [];
+      for (const [name, rows] of byName) {
+        const values = toFacetValues(rows);
+        if (values.length > 0) options.push({ name, values });
+      }
+
+      const priceRow = (branch('price') as { minCents?: number; maxCents?: number }[])[0];
+
+      const facets: Facets = {
+        brands: toFacetValues(branch('brands') as { _id: unknown; count: number }[]),
+        options: options.sort((a, b) => a.name.localeCompare(b.name)),
+        priceRange:
+          priceRow?.minCents === undefined || priceRow.maxCents === undefined
+            ? null
+            : { minCents: priceRow.minCents, maxCents: priceRow.maxCents },
+      };
+
+      return {
+        products: page.map((doc) => toDomain(doc, `${query.storeId}/${doc._id}`)),
+        nextCursor: hasMore ? (page[page.length - 1]?._id ?? null) : null,
+        facets,
+      };
+    },
+
     async save(product) {
       const document = toDocument(product);
       await collection.replaceOne({ _id: document._id, storeId: document.storeId }, document, {
@@ -254,5 +500,19 @@ export const ensureProductIndexes = async (db: Db): Promise<void> => {
   await collection.createIndex(
     { storeId: 1, 'variants.sku': 1 },
     { unique: true, name: 'storeId_sku_unique' },
+  );
+
+  /*
+   * One text index per collection, over the derived searchText field.
+   *
+   * default_language 'none' turns stemming OFF, deliberately. Stemmers are
+   * per-language and Arabic is not among the supported set, so leaving it on
+   * would stem the English half of a bilingual catalogue and do nothing useful
+   * for the other half. normaliseSearchText has already folded both sides into
+   * the same shape, which is the part that actually matters here.
+   */
+  await collection.createIndex(
+    { searchText: 'text' },
+    { name: 'searchText_text', default_language: 'none' },
   );
 };

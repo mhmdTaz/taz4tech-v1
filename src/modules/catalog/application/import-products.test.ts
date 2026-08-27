@@ -29,6 +29,7 @@ const repository = (existing: Product[] = []) => {
     findBySlug: vi.fn().mockResolvedValue(null),
     findById: vi.fn(),
     findBySku: vi.fn(),
+    search: vi.fn(),
     findBySlugs: vi.fn(async (_storeId: string, slugs: readonly string[]) =>
       existing.filter((product) => slugs.includes(product.slug)),
     ),

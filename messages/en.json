@@ -35,6 +35,15 @@
     "sku": "SKU",
     "gallery": "Product images",
     "breadcrumb": "Breadcrumb",
-    "notFoundTitle": "Product not found"
+    "notFoundTitle": "Product not found",
+    "filters": "Filters",
+    "brand": "Brand",
+    "clearFilters": "Clear all filters",
+    "searchLabel": "Search products",
+    "searchPlaceholder": "Search for a laptop, charger, cable…",
+    "searchSubmit": "Search",
+    "noMatches": "Nothing matches those filters. Try widening them.",
+    "resultCount": "{count, plural, =0 {No products} one {# product} other {# products}}",
+    "selected": "selected"
   }
 }
