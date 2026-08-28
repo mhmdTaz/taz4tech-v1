@@ -85,10 +85,10 @@ describe('saveProduct', () => {
     const repo = repositoryWith();
     const result = await save(repo)(product({ slug: 'Not A Slug' }));
 
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'invalid') {
-      expect(result.error.reason.tag).toBe('slug_invalid');
-    }
+    expect(result).toMatchObject({
+      ok: false,
+      error: { tag: 'invalid', reason: { tag: 'slug_invalid' } },
+    });
     expect(repo.save).not.toHaveBeenCalled();
   });
 
@@ -99,10 +99,10 @@ describe('saveProduct', () => {
     const repo = repositoryWith(product({ id: 'PRODUCT0000000000000000BB' }));
     const result = await save(repo)(product());
 
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'slug_taken') {
-      expect(result.error.slug).toBe('lenovo-ideapad-3');
-    }
+    expect(result).toMatchObject({
+      ok: false,
+      error: { tag: 'slug_taken', slug: 'lenovo-ideapad-3' },
+    });
     expect(repo.save).not.toHaveBeenCalled();
   });
 

@@ -137,8 +137,12 @@ export type ProductError =
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SLUG_MAX = 120;
 
-export const isValidSlug = (slug: string): boolean =>
-  slug.length > 0 && slug.length <= SLUG_MAX && SLUG.test(slug);
+// The length bound is checked first because SLUG has none, and because a regex
+// is worth skipping on a string that is already too long to be a slug. There is
+// no `slug.length > 0` guard: SLUG requires at least one character, so an empty
+// string is already refused a few tokens later, and a guard that only restates
+// the next condition reads as though something else were true.
+export const isValidSlug = (slug: string): boolean => slug.length <= SLUG_MAX && SLUG.test(slug);
 
 /**
  * Build a URL slug from a title.

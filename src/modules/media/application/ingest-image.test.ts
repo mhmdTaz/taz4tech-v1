@@ -133,10 +133,10 @@ describe('when the supplier misbehaves', () => {
     });
 
     const result = await h.run('https://supplier.example.com/huge.png');
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'rejected') {
-      expect(result.error.reason.tag).toBe('too_large');
-    }
+    expect(result).toMatchObject({
+      ok: false,
+      error: { tag: 'rejected', reason: { tag: 'too_large' } },
+    });
   });
 });
 

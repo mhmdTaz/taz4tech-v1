@@ -107,8 +107,18 @@ describe('slugs', () => {
   });
 
   it('never ends with a hyphen, even when truncated at the limit', () => {
+    // 119 letters then a space: the slug is 119 a's, a hyphen at index 119, and
+    // more after it — so the cut at SLUG_MAX lands ON the hyphen. That is the
+    // only way the final trim has anything to do, and the difference between a
+    // valid slug and one isValidSlug refuses.
+    const long = slugify(`${'a'.repeat(119)} bbbb`);
+    expect(long).toBe('a'.repeat(119));
+    expect(isValidSlug(long)).toBe(true);
+  });
+
+  it('keeps the last word when the cut does not land on a hyphen', () => {
     const long = slugify(`${'a'.repeat(118)} bbbb`);
-    expect(long.endsWith('-')).toBe(false);
+    expect(long).toBe(`${'a'.repeat(118)}-b`);
     expect(isValidSlug(long)).toBe(true);
   });
 
@@ -433,6 +443,19 @@ describe('reading a product', () => {
     expect(defaultVariant(product()).sku).toBe('SKU-1');
   });
 
+  it('keeps the first of two variants that cost the same', () => {
+    // Equal prices must not reorder the PDP. Whichever the operator listed
+    // first is the one whose colour and photo the customer sees, and a tie
+    // broken the other way would move it for no reason a customer can see.
+    const tied = product({
+      variants: [
+        variant({ sku: 'FIRST', price: usd(99900) }),
+        variant({ sku: 'SECOND', price: usd(99900) }),
+      ],
+    });
+    expect(defaultVariant(tied).sku).toBe('FIRST');
+  });
+
   it('reports the price range across variants', () => {
     const range = priceRange(withOptions());
     expect(range.from.cents).toBe(119900);
@@ -470,6 +493,41 @@ describe('reading a product', () => {
     ).toBeNull();
   });
 
+  it('keeps two variants apart when one option value spells out another pair', () => {
+    /*
+     * Option lists are compared by joining them into one key, and the separator
+     * is what stops "Colour=Black" + "Storage=256GB" from reading the same as a
+     * single Colour of "Black|Storage=256GB". Without it the two variants below
+     * collapse onto one key: the customer picking the second is quoted the
+     * first one's price, and createProduct calls a legitimate matrix a
+     * duplicate.
+     *
+     * Contrived on purpose — a supplier feed is where a value like this arrives.
+     */
+    const ambiguous = product({
+      optionNames: ['Colour'],
+      variants: [
+        variant({
+          sku: 'TWO-AXES',
+          options: [
+            { name: 'Colour', value: 'Black' },
+            { name: 'Storage', value: '256GB' },
+          ],
+          price: usd(129900),
+        }),
+        variant({
+          sku: 'ONE-AXIS',
+          options: [{ name: 'Colour', value: 'BlackStorage=256GB' }],
+          price: usd(99900),
+        }),
+      ],
+    });
+
+    expect(findVariant(ambiguous, [{ name: 'Colour', value: 'BlackStorage=256GB' }])?.sku).toBe(
+      'ONE-AXIS',
+    );
+  });
+
   it('is purchasable only when active', () => {
     expect(isPurchasable(product({ status: 'active' }))).toBe(true);
     expect(isPurchasable(product({ status: 'draft' }))).toBe(false);
@@ -505,5 +563,20 @@ describe('isOnOffer', () => {
 
   it('is not on offer without a compare-at price', () => {
     expect(isOnOffer(variant(), NOW)).toBe(false);
+  });
+
+  /*
+   * createProduct refuses a half-set offer, so these two shapes cannot be
+   * written today. isOnOffer is still called on every variant read back from
+   * Mongo, including documents written before that rule existed — and one of
+   * these reads a date off null, which is a crashed product page rather than a
+   * wrong price.
+   */
+  it('is not on offer with an end date but nothing to discount', () => {
+    expect(isOnOffer(variant({ offerEndsAt: LATER }), NOW)).toBe(false);
+  });
+
+  it('is not on offer with a compare-at price and no end date', () => {
+    expect(isOnOffer(variant({ compareAtPrice: usd(149900) }), NOW)).toBe(false);
   });
 });

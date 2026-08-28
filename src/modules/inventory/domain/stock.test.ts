@@ -121,6 +121,15 @@ describe('canTake', () => {
     expect(canTake(null, 999)).toBe(true);
   });
 
+  it('allows a quantity of exactly one, which is most of them', () => {
+    // Every other test here passes 1 only in cases that must REFUSE, so the
+    // lower bound could become `< 2` with all of them still green — and the
+    // commonest request in the shop, one of something, would stop working.
+    expect(canTake(created({ onHand: 5 }), 1)).toBe(true);
+    expect(canTake(created({ onHand: 1 }), 1)).toBe(true);
+    expect(canTake(null, 1)).toBe(true);
+  });
+
   it('refuses zero and negative quantities', () => {
     // "Take none" is not a request to satisfy; it is a caller with a bug.
     expect(canTake(created(), 0)).toBe(false);

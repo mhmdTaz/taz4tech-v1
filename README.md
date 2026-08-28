@@ -157,6 +157,11 @@ green check is not the same as a working check:
   immediately: the E.164 pattern on the shop's own contact number was anchored
   only at the end, so `"call me on +96170000000"` validated — and would have gone
   into a `tel:` link on every page. Nothing else in the suite noticed.
+- **The mutants Stryker cannot reach are proven separately**
+  (`pnpm test:mutation:static`). Code that runs once at module load — a folding
+  table, a synonym index — is cached by vitest before the mutant is switched on,
+  so Stryker reports it as surviving whether or not the tests would catch it.
+  This applies each one to the file for real and requires the suite to fail.
 - **Design tokens are contrast-checked in the unit suite**
   (`src/ui/palette-contrast.test.ts`). `--color-faint` shipped at 3.18:1 and was
   only caught by axe five minutes into CI, inside a Playwright shard that first
@@ -290,10 +295,11 @@ the start, so `"call me on +96170000000"` passed — and would have gone into a
 `tel:` link at the bottom of every page. Every test still passed with the `^`
 removed. That one is fixed and the store domain is now at 100%.
 
-The survivors were recorded rather than chased in that change; `cart.ts`, the
-worst of them, has since had a pass of its own — see above. Mutation testing is
-a CI job with a floor that gets raised as the score does, so the number can only
-go up.
+The survivors were recorded rather than chased in that change. Every module has
+since had a pass of its own — `cart`, `orders`, then `catalog` and `media`
+together — and the four write-ups below are what each one turned up. Mutation
+testing is a CI job with a floor that gets raised as the score does, **currently
+97**, so the number can only go up.
 
 It runs against `vitest.mutation.config.ts` — the unit project with its wrapper
 removed, because Stryker's vitest runner takes a config file rather than a
@@ -379,6 +385,155 @@ The two that remain replace `delivered: []` with `["Stryker was here"]` in the
 transition table. Nothing can kill them: the value is not an `OrderStatus`, so
 no `canTransition` call with a real status can tell the difference. A mutation
 the type system forbids is not a gap in the tests.
+
+### And what it found in the catalogue
+
+The catalogue was the last weak module at 93%, with fifty survivors across four
+files. It is at **97%** now, `media` went from 89% to **100%** in the same pass,
+and the domain as a whole is at **97.79% of 1,265 mutants**.
+
+**Six were a test shape that asserts nothing.** Written out:
+
+```ts
+expect(result.ok).toBe(false);
+if (!result.ok && result.error.tag === 'price_range_reversed') {
+  expect(result.error.minCents).toBe(5000);   // never runs if the tag is wrong
+}
+```
+
+The guard is there to narrow the type, and it also decides whether the assertion
+happens at all. Break the tag and the `if` is simply false: nothing is checked,
+the test passes, and in review it reads like a test that checks the tag. **The
+same shape was in eighteen further places** across catalog, media, store and
+platform — none of them measured by Stryker, all of them equally hollow. Every
+one is now a single whole-value assertion:
+
+```ts
+expect(result).toEqual({
+  ok: false,
+  error: { tag: 'price_range_reversed', minCents: 5000, maxCents: 1000 },
+});
+```
+
+**Four were price bounds.** Every test of `priceMinCents`/`priceMaxCents` passed
+exactly one bound, so `min > max` — the entire subject of `price_range_reversed`
+— was never once evaluated with two real numbers, and could be inverted, made
+non-strict or deleted unnoticed. A `priceMaxCents` of exactly zero was never
+tried either, though a minimum of zero was.
+
+**Six were offers half-set.** `compareAtPrice` without `offerEndsAt`, or the
+reverse. `createProduct` refuses both, so no test built one — but `isOnOffer`
+runs on every variant read back from Mongo, including documents written before
+that rule existed, and one of these mutants reads `.getTime()` off `null`. That
+is a crashed product page rather than a wrong price. The same gap let
+`clear_offer` report **unchanged** for exactly the products it exists to repair,
+leaving them permanently unsavable.
+
+**Six were search behaviour.** The removable-mark set is built from a range, and
+every test used marks from the bottom of it, so the range could be built one
+short. A query is truncated at 120 characters and then trimmed — with the cut
+landing on a space, dropping the trim puts an empty term into the `$text` query.
+The whole phrase and each of its words are searched for separately, which only
+a two-word query can distinguish. And synonyms match whole terms, not
+substrings: `laptops` must not expand, or `case` would expand inside
+`staircase`.
+
+**Three were a slug, an option key, and a tie.** A title long enough for the cut
+to land *on* a hyphen produces `...aaa-`, which `isValidSlug` refuses — the
+existing test for it was off by one character and never reached the case.
+Variant options are joined with `|` before comparison, and without the separator
+`Colour=Black` + `Storage=256GB` reads identically to a single colour named
+`Black|Storage=256GB`: one customer's selection quoted at another variant's
+price. And two variants at the same price could swap which one the page opens
+on.
+
+**One was a brand fold nobody could see.** Setting a brand to `"   "` on a
+product that has no brand must report *unchanged*. It did — but only because
+`createProduct` normalises blanks to null a moment later, so the bulk-edit code
+that also does it could be deleted with every test still passing. The one thing
+that changes is `updatedAt`, which is the field the storefront sorts and caches
+on. This is the one I reasoned my way to the wrong answer on, twice, before
+running it.
+
+**And two in `media` were a boundary measuring itself.** The five-megabyte
+upload cap is tested as `MAX_BYTES` and `MAX_BYTES + 1`, so a cap of five
+*bytes* satisfies both assertions — while refusing every product photograph ever
+uploaded. A boundary test that reads the boundary from the thing it is testing
+cannot detect a wrong boundary. It is asserted as `5_242_880` now, written out,
+once.
+
+#### Two pieces of code were deleted rather than tested
+
+`isValidSlug` began `slug.length > 0 && …`, and the regex on the same line
+already requires a character. `MULTI_WORD_ENTRIES` was sorted longest-first "so
+that `hard drive` is matched before `hard` would be" — which is a rule for a
+first-match-wins loop, and this loop has no `break`, expands every match, and
+collects into a Set. Neither had behaviour left to test. Five mutants went with
+them, and a comment describing a precedence rule the code does not have is worse
+than no comment at all.
+
+#### The nineteen that remain are equivalent
+
+**Five** are guards TypeScript requires and JavaScript does not: `min !== undefined
+&& min < 0` cannot lose its first half in the source, though `undefined < 0` is
+already false either way. **Three** are `-+` where only a single hyphen can ever
+occur, because the line above collapses runs of anything else into one. **Two**
+choose between two prices that compare equal, where *which object* is not a
+question any caller can ask. **One** is a `?? []` whose fallback could hold any
+non-blank string and behave the same.
+
+**One is an artifact of how the report is written.** Stryker prints a
+`LogicalOperator` survivor on `collection.ts:122` as `min !== undefined || max
+!== undefined`; applied as printed, `&&` binds tighter and the meaning changes,
+and the suite catches it immediately. Stryker parenthesises what it substitutes,
+so the mutant it actually ran was the equivalent one. Both tools are right about
+different mutations — which is worth knowing before chasing a survivor that the
+report describes and the runner did not test.
+
+The last **seven** are Stryker's own blind spot, below.
+
+### The mutants Stryker cannot kill
+
+Stryker switches one mutant on and re-runs the tests. That works for code inside
+a function, which re-executes on every call. It does not work for code that runs
+**once, at module load**, to build a constant: vitest imports a module once per
+worker and caches it, so the mutated line may never run again. No test fails, and
+Stryker reports **Survived**.
+
+Seven of the catalogue's survivors are this — the alef/ya/ta-marbuta folding
+table, the NFKC pass, the synonym index. Every one of them is caught by the
+suite. Stryker simply could not see it happen.
+
+The obvious switch, `ignoreStatic: true`, is worse than the problem: on
+`search.ts` alone it drops 137 of 176 mutants — the entire synonym vocabulary
+and every character table — and reports 100% for the 39 that are left. A score
+that excludes the lookup tables is not a score.
+
+```bash
+pnpm test:mutation:static
+```
+
+So the mutants are proven the only way left. The script reads the report, edits
+the file on disk, applies one static survivor for real, runs the whole unit
+suite, and requires it to fail. It restores the file on every path including
+Ctrl-C. Two mutants are declared equivalent in the script itself, with the
+argument written next to them — and they are still replayed, so a claim that
+stops being true fails the build. **This is a CI step, next to Stryker.**
+
+It answers the question Stryker's number cannot: a static mutant is now either
+proven caught, or a hole. `--all` replays the non-static survivors too, as a
+survey — with the caveat that it applies each replacement as *written*, where
+Stryker parenthesises it, so a swapped operator can bind differently under the
+two. `collection.ts` has one that disagrees for exactly that reason.
+
+#### The rule underneath all of it
+
+Every gap in this pass was a check that could not fail: an assertion inside a
+guard that the assertion's own subject controls, a boundary expressed in terms
+of the boundary, a comparison never given two operands, a mutation score that
+excludes the tables. **A gate that passes because it has no jurisdiction looks
+exactly like a gate that passes because the code is right** — and only something
+that deliberately breaks the code can tell the two apart.
 
 ### An expired offer no longer freezes a product
 
@@ -1347,16 +1502,18 @@ conflict still throws: a dropped connection must never be reported as
   token in the link would fix it and would also break every confirmation already
   pasted into a WhatsApp thread. Worth deciding before the shop is busy enough for
   the numbers to be worth walking.
-- **64 mutants survive on the domain layer.** The score is 95% against a floor
-  of 94, so it cannot regress. `cart.ts` and `orders/order.ts` have had their
-  passes, at 97% and 99%; what is left is `catalog` at 93% — fifty of the
-  sixty-four, spread across `collection.ts`, `search.ts` and `product.ts` — and
-  `media/image.ts` at 89%.
+- **28 mutants survive on the domain layer, and every one has an argument.** The
+  score is 97.79% against a floor of 97, so it cannot regress. Every module has
+  had its pass; `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%. Of
+  what is left, nine are static — Stryker's blind spot, and
+  `pnpm test:mutation:static` proves or fails each of them — and the rest are
+  guards the type system requires, a `-+` that can only ever match one
+  character, and ties between values that compare equal.
 
-  The two files done so far split very differently: the cart was a third real
-  gaps, a third code with no observable behaviour worth deleting, and a third
-  equivalent mutants; the order was almost entirely real gaps. There is no rule
-  to apply in advance, which is the argument for reading the survivors rather
-  than reporting the number.
+  The four passes split completely differently from one another: the cart was a
+  third real gaps, a third code worth deleting, a third equivalent; the order was
+  almost entirely real gaps; the catalogue was mostly tests that could not fail.
+  There is no rule to apply in advance, which is the argument for reading the
+  survivors rather than reporting the number.
 
 *General information from primary sources, not legal advice.*
