@@ -140,6 +140,59 @@ test.describe('the orders list', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Orders' })).toBeVisible();
   });
 
+  test('finds a customer by the number they give on the phone', async ({ page }) => {
+    /*
+     * The phone number IS the customer identity here, so this is a lookup, not a
+     * search. The operator types what the customer says — "03 123 456" — and
+     * orders store +9613123456, because every one of them went in through the
+     * same normaliser. Without normalising the search too, the number on the
+     * screen never matches the number in the database.
+     */
+    const number = await placeOrder(page);
+    await signIn(page);
+
+    for (const typed of ['03 123 456', '+961 3 123 456', '03123456']) {
+      await page.goto(`/admin/orders?phone=${encodeURIComponent(typed)}`);
+      await expect(page.getByRole('row').filter({ hasText: number }), typed).toBeVisible();
+    }
+  });
+
+  test('says a number is unreadable rather than showing an empty list', async ({ page }) => {
+    // "No orders for that number" and "that is not a number" are different
+    // sentences, and the operator is on the phone to somebody while they read one.
+    await signIn(page);
+    await page.goto('/admin/orders?phone=the+guy+from+yesterday');
+
+    await expect(alert(page)).toContainText('is not a phone number');
+  });
+
+  test('combines the phone lookup with a status filter', async ({ page }) => {
+    const number = await placeOrder(page);
+    await signIn(page);
+
+    await page.goto('/admin/orders?phone=03+123+456&status=pending');
+    await expect(page.getByRole('row').filter({ hasText: number })).toBeVisible();
+
+    await page.goto('/admin/orders?phone=03+123+456&status=delivered');
+    await expect(page.getByRole('row').filter({ hasText: number })).toHaveCount(0);
+  });
+
+  test('searches from the form with no JavaScript', async ({ browser }) => {
+    const context = await browser.newContext({ javaScriptEnabled: false });
+    const page = await context.newPage();
+
+    const number = await placeOrder(page);
+    await signIn(page);
+    await page.goto('/admin/orders');
+
+    await page.getByLabel('Customer phone').fill('03 123 456');
+    await page.getByRole('button', { name: 'Find orders' }).click();
+
+    await expect(page).toHaveURL(/phone=/);
+    await expect(page.getByRole('row').filter({ hasText: number })).toBeVisible();
+    await context.close();
+  });
+
   test('opens an order from its number', async ({ page }) => {
     const number = await placeOrder(page);
     await signIn(page);

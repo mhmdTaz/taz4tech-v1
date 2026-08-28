@@ -22,6 +22,7 @@
  * customer promised something that is not there — is the expensive one.
  */
 
+import { parseLebanesePhone } from '@platform/phone';
 import { err, ok, type Result } from '@platform/result';
 import type { OrderRepository, StockLedger } from '../contracts';
 import {
@@ -111,11 +112,29 @@ export const makeUpdateOrderStatus =
     return ok(updated);
   };
 
+/**
+ * What the list was asked to find, and whether it could.
+ *
+ * `unreadable` is its own case rather than an empty result, because "no orders
+ * for +961 3 123 456" and "that is not a phone number" are different sentences
+ * and the operator is on the phone to somebody while they read one of them.
+ */
+export type PhoneSearch =
+  | { readonly tag: 'none' }
+  | { readonly tag: 'searched'; readonly e164: string }
+  | { readonly tag: 'unreadable'; readonly input: string };
+
 export type ListOrders = (input: {
   readonly status?: OrderStatus;
   readonly limit?: number;
   readonly cursor?: string;
-}) => Promise<{ readonly orders: readonly Order[]; readonly nextCursor: string | null }>;
+  /** As the operator typed it. Normalised here, so "03 123 456" finds the order. */
+  readonly phone?: string;
+}) => Promise<{
+  readonly orders: readonly Order[];
+  readonly nextCursor: string | null;
+  readonly phone: PhoneSearch;
+}>;
 
 /** How many orders one admin page shows. */
 export const DEFAULT_ORDER_PAGE = 25;
@@ -132,10 +151,35 @@ export const makeListOrders =
       MAX_ORDER_PAGE,
     );
 
-    return deps.repository.list({
+    /*
+     * The operator types what a customer says: "03 123 456". Orders store one
+     * shape, +9613123456, because every one of them went in through the same
+     * normaliser — so the search has to go through it too, or the number on the
+     * screen never matches the number in the database.
+     */
+    const phone = phoneSearch(input.phone);
+
+    if (phone.tag === 'unreadable') {
+      // Nothing is asked of the database: an unreadable number cannot match a
+      // stored one, and a query that scans for it is a query for nothing.
+      return { orders: [], nextCursor: null, phone };
+    }
+
+    const page = await deps.repository.list({
       storeId: deps.storeId,
       limit,
       ...(input.status === undefined ? {} : { status: input.status }),
       ...(input.cursor === undefined || input.cursor.length === 0 ? {} : { cursor: input.cursor }),
+      ...(phone.tag === 'searched' ? { phone: phone.e164 } : {}),
     });
+
+    return { ...page, phone };
   };
+
+const phoneSearch = (input: string | undefined): PhoneSearch => {
+  const typed = (input ?? '').trim();
+  if (typed.length === 0) return { tag: 'none' };
+
+  const parsed = parseLebanesePhone(typed);
+  return parsed.ok ? { tag: 'searched', e164: parsed.value } : { tag: 'unreadable', input: typed };
+};

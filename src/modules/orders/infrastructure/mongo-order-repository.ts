@@ -180,6 +180,9 @@ export const createMongoOrderRepository = (db: Db): OrderRepository => {
        */
       const filter: Record<string, unknown> = { storeId: query.storeId };
       if (query.status !== undefined) filter.status = query.status;
+      // Exact, on the stored E.164 shape. Every order goes in through the same
+      // normaliser, so there is exactly one spelling to match.
+      if (query.phone !== undefined) filter['customer.phone'] = query.phone;
       if (query.cursor !== undefined) filter._id = { $lt: query.cursor };
 
       const documents = await collection

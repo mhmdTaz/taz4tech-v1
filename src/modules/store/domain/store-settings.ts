@@ -6,17 +6,26 @@
  * layer mutation testing runs against, so every branch here has to matter.
  */
 
-import type { Locale } from '@platform/locale';
 import { type ByRegion, REGIONS, type Region } from '@platform/regions';
 import { err, ok, type Result } from '@platform/result';
 
+/*
+ * WHAT IS NOT HERE, AND WHY
+ * -------------------------
+ * `siteUrl`, `locales` and `defaultLocale` used to live on this type. Nothing
+ * ever read them. Canonical links are built from `SITE_URL` on the deploy, and
+ * routing is built from the compiled-in locale list — so the stored copies were
+ * three values that looked authoritative, could drift from the real ones, and
+ * governed nothing. The settings screen showed the REAL values beside them,
+ * which is the clearest sign they were furniture.
+ *
+ * They are dropped rather than wired up: a shop that could change its own
+ * locales at runtime would need routing, the sitemap and every hreflang to
+ * follow, which is a deploy either way.
+ */
 export type StoreSettings = {
   readonly storeId: string;
   readonly name: string;
-  readonly defaultLocale: Locale;
-  readonly locales: readonly Locale[];
-  /** Canonical origin without a trailing slash. */
-  readonly siteUrl: string;
   /** E.164, the identity anchor for the whole system. */
   readonly contactPhone: string;
   /**
@@ -47,8 +56,6 @@ export type StoreSettings = {
 
 export type StoreSettingsError =
   | { readonly tag: 'name_empty' }
-  | { readonly tag: 'no_locales' }
-  | { readonly tag: 'default_locale_not_offered'; readonly defaultLocale: Locale }
   | { readonly tag: 'vat_out_of_range'; readonly vatBasisPoints: number }
   | { readonly tag: 'phone_not_e164'; readonly contactPhone: string }
   | {
@@ -67,10 +74,6 @@ export const createStoreSettings = (
   input: StoreSettings,
 ): Result<StoreSettings, StoreSettingsError> => {
   if (input.name.trim().length === 0) return err({ tag: 'name_empty' });
-  if (input.locales.length === 0) return err({ tag: 'no_locales' });
-  if (!input.locales.includes(input.defaultLocale)) {
-    return err({ tag: 'default_locale_not_offered', defaultLocale: input.defaultLocale });
-  }
   if (
     !Number.isInteger(input.vatBasisPoints) ||
     input.vatBasisPoints < 0 ||
@@ -93,7 +96,7 @@ export const createStoreSettings = (
       return err({ tag: 'delivery_fee_invalid', region, deliveryFeeCents: cents });
     }
   }
-  return ok({ ...input, name: input.name.trim(), siteUrl: input.siteUrl.replace(/\/+$/, '') });
+  return ok({ ...input, name: input.name.trim() });
 };
 
 /** VAT as a multiplier for Money.applyRate — 1100 bp becomes 0.11. */

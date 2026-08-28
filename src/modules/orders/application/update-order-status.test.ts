@@ -280,3 +280,74 @@ describe('listing orders', () => {
     expect(list.mock.calls[0]?.[0]).toMatchObject({ cursor: 'ORDER123' });
   });
 });
+
+describe('finding a customer by phone', () => {
+  const lister = () => {
+    const list = vi.fn(async (_query: ListOrdersQuery) => ({
+      orders: [] as Order[],
+      nextCursor: null as string | null,
+    }));
+    const repository = { ...harness().repository, list } satisfies OrderRepository;
+    return { list, run: makeListOrders({ repository, storeId: 'taz4tech' }) };
+  };
+
+  it('normalises what the operator typed before looking', async () => {
+    /*
+     * The operator types what the customer says. Orders store one shape,
+     * because every one of them went in through the same normaliser — so the
+     * search has to go through it too, or the number on the screen never
+     * matches the number in the database.
+     */
+    const { list, run } = lister();
+    const result = await run({ phone: '03 123 456' });
+
+    expect(list.mock.calls[0]?.[0]).toMatchObject({ phone: '+9613123456' });
+    expect(result.phone).toEqual({ tag: 'searched', e164: '+9613123456' });
+  });
+
+  it('finds the same orders however the number was written', async () => {
+    const { list, run } = lister();
+    await run({ phone: '+961 3 123 456' });
+    await run({ phone: '03123456' });
+
+    expect(list.mock.calls[0]?.[0]).toMatchObject({ phone: '+9613123456' });
+    expect(list.mock.calls[1]?.[0]).toMatchObject({ phone: '+9613123456' });
+  });
+
+  it('does not ask the database for a number it could not read', async () => {
+    // An unreadable number cannot match a stored one, so a query for it is a
+    // query for nothing — and "unreadable" is a different sentence from "none
+    // found", which matters when somebody is on the phone.
+    const { list, run } = lister();
+    const result = await run({ phone: 'the guy from yesterday' });
+
+    expect(list).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      orders: [],
+      nextCursor: null,
+      phone: { tag: 'unreadable', input: 'the guy from yesterday' },
+    });
+  });
+
+  it('treats a blank box as no search at all', async () => {
+    const { list, run } = lister();
+    const result = await run({ phone: '   ' });
+
+    expect(list.mock.calls[0]?.[0]).not.toHaveProperty('phone');
+    expect(result.phone).toEqual({ tag: 'none' });
+  });
+
+  it('combines with a status filter rather than replacing it', async () => {
+    const { list, run } = lister();
+    await run({ phone: '03 123 456', status: 'pending' });
+
+    expect(list.mock.calls[0]?.[0]).toMatchObject({ phone: '+9613123456', status: 'pending' });
+  });
+
+  it('refuses a number this shop could never have stored', async () => {
+    // Checkout only accepts Lebanese numbers, so a foreign one matches nothing
+    // by construction — saying so beats an empty page.
+    const { run } = lister();
+    expect((await run({ phone: '+44 20 7123 4567' })).phone.tag).toBe('unreadable');
+  });
+});

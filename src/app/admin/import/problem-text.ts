@@ -62,6 +62,11 @@ export const describeCellProblem = (problem: CellProblem): string => {
       return `"${problem.value}" could be day-first or month-first. Write it as 2026-08-27.`;
     case 'unparsable_date':
       return `"${problem.value}" is not a date. Write it as 2026-08-27.`;
+    case 'date_already_past':
+      // The row still imports; it imports WITHOUT the offer, because an offer
+      // that has ended is no offer. Said plainly so a mistyped year is caught
+      // here rather than noticed as a discount that never appeared.
+      return `"${problem.value}" has already passed, so this offer will not be applied.`;
     case 'unknown_status':
       return `"${problem.value}" is not a status. Use active, draft or archived.`;
     case 'unparsable_number':

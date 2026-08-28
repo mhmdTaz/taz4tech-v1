@@ -12,9 +12,6 @@ import {
 const valid: StoreSettings = {
   storeId: 'taz4tech',
   name: 'Taz4Tech',
-  defaultLocale: 'en',
-  locales: ['en', 'ar', 'fr'],
-  siteUrl: 'https://taz4tech.com',
   contactPhone: '+96170123456',
   vatBasisPoints: 1100,
   commercialRegistryNumber: null,
@@ -34,34 +31,11 @@ describe('createStoreSettings', () => {
     if (result.ok) expect(result.value.name).toBe('Taz4Tech');
   });
 
-  it('strips trailing slashes from the canonical URL', () => {
-    const result = createStoreSettings({ ...valid, siteUrl: 'https://taz4tech.com//' });
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.siteUrl).toBe('https://taz4tech.com');
-  });
-
   it('rejects an empty or whitespace-only name', () => {
     for (const name of ['', '   ']) {
       const result = createStoreSettings({ ...valid, name });
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.error.tag).toBe('name_empty');
-    }
-  });
-
-  it('rejects a store that offers no locales', () => {
-    const result = createStoreSettings({ ...valid, locales: [] });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.tag).toBe('no_locales');
-  });
-
-  it('rejects a default locale the store does not actually offer', () => {
-    const result = createStoreSettings({ ...valid, defaultLocale: 'fr', locales: ['en', 'ar'] });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.tag).toBe('default_locale_not_offered');
-      if (result.error.tag === 'default_locale_not_offered') {
-        expect(result.error.defaultLocale).toBe('fr');
-      }
     }
   });
 
@@ -84,6 +58,16 @@ describe('createStoreSettings', () => {
     'not a phone',
     '',
     '+961701234567890123',
+    /*
+     * Anchored at the START, not only at the end.
+     *
+     * Found by mutation testing: dropping the `^` from the pattern left every
+     * test passing, because nothing asserted on a number with junk in front of
+     * it. A shop whose stored contact number is "call me on +96170000000" puts
+     * that string in a tel: link on every page.
+     */
+    'call me on +96170000000',
+    ' +96170000000',
   ])('rejects %s as a contact phone', (contactPhone) => {
     const result = createStoreSettings({ ...valid, contactPhone });
     expect(result.ok).toBe(false);

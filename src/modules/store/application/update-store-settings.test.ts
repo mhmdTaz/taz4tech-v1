@@ -7,9 +7,6 @@ import { makeUpdateStoreSettings, type StoreSettingsForm, toForm } from './updat
 const stored = (overrides: Partial<StoreSettings> = {}): StoreSettings => ({
   storeId: 'taz4tech',
   name: 'Taz4Tech',
-  defaultLocale: 'en',
-  locales: ['en', 'ar', 'fr'],
-  siteUrl: 'https://taz4tech.com',
   contactPhone: '+96170000000',
   vatBasisPoints: 1100,
   commercialRegistryNumber: null,
@@ -67,9 +64,6 @@ describe('editing the settings', () => {
 
     expect(h.written()).toMatchObject({
       storeId: 'taz4tech',
-      defaultLocale: 'en',
-      locales: ['en', 'ar', 'fr'],
-      siteUrl: 'https://taz4tech.com',
     });
   });
 

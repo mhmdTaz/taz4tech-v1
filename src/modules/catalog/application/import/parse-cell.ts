@@ -15,6 +15,7 @@ export type CellProblem =
   | { readonly tag: 'unparsable_money'; readonly value: string }
   | { readonly tag: 'ambiguous_date'; readonly value: string }
   | { readonly tag: 'unparsable_date'; readonly value: string }
+  | { readonly tag: 'date_already_past'; readonly value: string }
   | { readonly tag: 'unknown_status'; readonly value: string }
   | { readonly tag: 'unparsable_number'; readonly value: string }
   | { readonly tag: 'duplicate_sku'; readonly firstSeenAtRow: number };

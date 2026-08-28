@@ -183,11 +183,30 @@ const validateOffer = (variant: Variant, now: Date): ProductError | null => {
   // Lebanese consumer protection law requires every special offer to carry an
   // expiry date.
   if (variant.offerEndsAt === null) return { tag: 'offer_without_end_date', sku: variant.sku };
-  if (variant.offerEndsAt.getTime() <= now.getTime()) {
-    return { tag: 'offer_end_date_in_past', sku: variant.sku };
-  }
+
+  /*
+   * AN OFFER WHOSE DATE HAS PASSED IS NOT REFUSED. IT IS CLEARED.
+   *
+   * This used to be an error, and it made every product unwritable a month
+   * after its own promotion ended: an operator could not archive a discontinued
+   * product, correct its price, or fix a typo in its title, because a date in
+   * the past failed the whole write. That is friction arriving monthly, by
+   * design, for no protection — `isOnOffer` already answers false for an
+   * expired offer, so the storefront never showed it either way.
+   *
+   * Clearing it makes the stored data agree with what customers see. The guard
+   * that mattered — an operator typing 2025 when they meant 2026 — moved to the
+   * importer, which can name the row and the cell rather than failing a write
+   * whose author is a bulk edit nobody is watching.
+   */
   return null;
 };
+
+/** An offer that has ended is no offer. Applied on the way in, so the data agrees with the page. */
+const withoutExpiredOffer = (variant: Variant, now: Date): Variant =>
+  variant.offerEndsAt !== null && variant.offerEndsAt.getTime() <= now.getTime()
+    ? { ...variant, compareAtPrice: null, offerEndsAt: null }
+    : variant;
 
 /** A variant's options must match the product's declared axes exactly, in order. */
 const validateVariantOptions = (
@@ -312,6 +331,9 @@ export const createProduct = (input: Product, now: Date): Result<Product, Produc
     title: title.value,
     description: description.value,
     brand: input.brand === null || input.brand.trim().length === 0 ? null : input.brand.trim(),
+    // An offer that has ended is no offer. Normalised here so the stored data
+    // says what the storefront has been showing all along.
+    variants: input.variants.map((variant) => withoutExpiredOffer(variant, now)),
   });
 };
 

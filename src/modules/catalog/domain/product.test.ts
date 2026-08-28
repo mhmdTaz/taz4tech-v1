@@ -278,7 +278,15 @@ describe('createProduct', () => {
       if (!result.ok) expect(result.error.tag).toBe('offer_without_end_date');
     });
 
-    it('rejects an end date already in the past', () => {
+    it('CLEARS an offer whose end date has passed, rather than refusing the product', () => {
+      /*
+       * This was an error until Phase 3.6, and it made every product unwritable
+       * a month after its own promotion ended — an operator could not archive a
+       * discontinued product or fix a typo in its title, because a date in the
+       * past failed the whole write. `isOnOffer` already answered false for it,
+       * so the storefront never showed the offer either way; clearing makes the
+       * stored data agree with the page.
+       */
       const result = createProduct(
         product({
           variants: [
@@ -287,19 +295,43 @@ describe('createProduct', () => {
         }),
         NOW,
       );
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error.tag).toBe('offer_end_date_in_past');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.variants[0]?.compareAtPrice).toBeNull();
+        expect(result.value.variants[0]?.offerEndsAt).toBeNull();
+      }
     });
 
-    it('rejects an end date exactly now, since the offer would already be over', () => {
+    it('clears an offer ending exactly now, since it is already over', () => {
       const result = createProduct(
         product({
           variants: [variant({ price: usd(99900), compareAtPrice: usd(129900), offerEndsAt: NOW })],
         }),
         NOW,
       );
-      expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error.tag).toBe('offer_end_date_in_past');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.variants[0]?.offerEndsAt).toBeNull();
+    });
+
+    it('leaves a live offer exactly as it is', () => {
+      // The normalisation must not touch an offer that has not ended: clearing a
+      // running promotion would take a price off the storefront mid-campaign.
+      const result = createProduct(
+        product({
+          variants: [
+            variant({ price: usd(99900), compareAtPrice: usd(129900), offerEndsAt: LATER }),
+          ],
+        }),
+        NOW,
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.variants[0]?.compareAtPrice?.cents).toBe(129900);
+        expect(result.value.variants[0]?.offerEndsAt).toEqual(LATER);
+      }
     });
 
     it('rejects a compare-at price at or below the selling price', () => {

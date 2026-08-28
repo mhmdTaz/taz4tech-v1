@@ -13,8 +13,17 @@ const dialog = (page: Page) => page.getByRole('dialog');
 const triggerFor = (page: Page, name: RegExp) =>
   page.locator('main ul li').filter({ hasText: name }).getByRole('link', { name: 'Quick view' });
 
+/**
+ * Open the quick view for one product, on a listing narrowed to it.
+ *
+ * Searched rather than browsed. The listing is paginated and other specs
+ * publish products in order to buy them, so a demo product that is on page one
+ * today is on page two while one of those is live — which is exactly how this
+ * failed: the Anker tile was simply not on the page being looked at.
+ */
 const openFor = async (page: Page, name: RegExp) => {
-  await page.goto('/en/products');
+  const term = name.source.replace(/[^\w\s-]/g, '').trim();
+  await page.goto(`/en/products?q=${encodeURIComponent(term)}`);
   await triggerFor(page, name).click();
   await expect(dialog(page)).toBeVisible();
 };
@@ -95,7 +104,11 @@ test.describe('opening and closing', () => {
     // A transient peek. The tile link is the thing that is shareable and
     // indexable; the dialog deliberately does not claim an address.
     await openFor(page, /Lenovo IdeaPad 3/);
-    await expect(page).toHaveURL(/\/en\/products$/);
+
+    // Still on the listing it was opened from — the search term openFor used is
+    // part of that URL, and what matters is that the dialog added nothing.
+    await expect(page).toHaveURL(/\/en\/products\?q=/);
+    await expect(page).not.toHaveURL(/quick|dialog|modal/);
   });
 
   test('shows the product, its price and the selected SKU', async ({ page }) => {

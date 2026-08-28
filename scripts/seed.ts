@@ -79,9 +79,6 @@ const main = async (): Promise<void> => {
   const defaults: StoreSettings = {
     storeId: config.storeId,
     name: 'Taz4Tech',
-    defaultLocale: 'en',
-    locales: ['en', 'ar', 'fr'],
-    siteUrl: config.siteUrl,
     contactPhone: '+96170000000',
     // Lebanon's VAT rate is 11%. Whether this store must charge it depends on
     // registration, which is not settled — see the note on the domain type.

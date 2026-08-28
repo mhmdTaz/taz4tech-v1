@@ -216,14 +216,19 @@ describe('clear_offer', () => {
     expect(changed(result).variants[0]?.offerEndsAt).toBeNull();
   });
 
-  it('rescues a product whose offer has already ended', () => {
-    // This is the point of the operation. An expired offer leaves a product in a
-    // state createProduct refuses, so every other bulk operation on it is
-    // refused too — this is the one that gets it unstuck.
+  it('is no longer the only way to touch a product whose offer has ended', () => {
+    /*
+     * This used to be the point of the operation: an expired offer left a
+     * product in a state createProduct refused, so every other bulk operation
+     * on it was refused too and this was the one that got it unstuck.
+     *
+     * The domain clears an expired offer instead of refusing it now, so any
+     * operation works — which is the friction that went away. `clear_offer`
+     * keeps its real job: ending an offer that is still running.
+     */
     expect(applyBulkOperation(expired, { tag: 'set_status', status: 'draft' }, NOW).tag).toBe(
-      'refused',
+      'changed',
     );
-    expect(applyBulkOperation(expired, { tag: 'clear_offer' }, NOW).tag).toBe('changed');
   });
 
   it('reports no change for a product that has no offer', () => {
@@ -264,15 +269,22 @@ describe('clear_offer', () => {
 });
 
 describe('a product already in an invalid state', () => {
+  /*
+   * An expired offer used to be this example, and it is not one any more — the
+   * domain clears it rather than refusing it. A was-price at or below the
+   * current price still is: that is a discount of zero advertised as a discount,
+   * which is a claim about money rather than a stale date, and no amount of time
+   * passing makes it true.
+   */
   const stale = product({
-    variants: [variant({ price: usd(1999), compareAtPrice: usd(2499), offerEndsAt: EARLIER })],
+    variants: [variant({ price: usd(2499), compareAtPrice: usd(2499), offerEndsAt: LATER })],
   });
 
   it('is refused by an operation that would change it', () => {
     const result = applyBulkOperation(stale, { tag: 'set_status', status: 'draft' }, NOW);
     expect(result).toMatchObject({
       tag: 'refused',
-      reason: { tag: 'invalid_result', reason: { tag: 'offer_end_date_in_past' } },
+      reason: { tag: 'invalid_result', reason: { tag: 'compare_at_not_higher' } },
     });
   });
 
