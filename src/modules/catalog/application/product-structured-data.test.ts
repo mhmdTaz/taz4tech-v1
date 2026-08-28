@@ -3,7 +3,12 @@ import { fromCents } from '@platform/money';
 import { unwrapOrThrow } from '@platform/result';
 import { describe, expect, it } from 'vitest';
 import type { Product, Variant } from '../domain/product';
-import { buildProductStructuredData, productPath, productUrl } from './product-structured-data';
+import {
+  buildBreadcrumbStructuredData,
+  buildProductStructuredData,
+  productPath,
+  productUrl,
+} from './product-structured-data';
 
 const NOW = new Date('2026-08-27T10:00:00Z');
 const LATER = new Date('2026-12-01T00:00:00Z');
@@ -256,5 +261,52 @@ describe('buildProductStructuredData', () => {
     const json = JSON.stringify(build(product()));
     expect(json).not.toContain('undefined');
     expect(() => JSON.parse(json)).not.toThrow();
+  });
+});
+
+describe('the breadcrumb trail', () => {
+  const crumbs = [
+    { name: 'Taz4Tech', path: '/en' },
+    { name: 'Products', path: '/en/products' },
+    { name: 'Lenovo IdeaPad 3', path: '/en/products/lenovo-ideapad-3' },
+  ];
+
+  it('is a BreadcrumbList a crawler recognises', () => {
+    const data = buildBreadcrumbStructuredData(crumbs, 'https://taz4tech.com');
+
+    expect(data['@context']).toBe('https://schema.org');
+    expect(data['@type']).toBe('BreadcrumbList');
+  });
+
+  it('numbers the positions from ONE, not zero', () => {
+    // A list starting at 0 is silently ignored rather than reported.
+    const data = buildBreadcrumbStructuredData(crumbs, 'https://taz4tech.com');
+    const items = data.itemListElement as { position: number }[];
+
+    expect(items.map((item) => item.position)).toEqual([1, 2, 3]);
+  });
+
+  it('gives every crumb an ABSOLUTE url', () => {
+    // Google ignores a relative `item` exactly as it ignores a relative
+    // canonical — silently, while the markup looks perfectly correct.
+    const data = buildBreadcrumbStructuredData(crumbs, 'https://taz4tech.com');
+    const items = data.itemListElement as { item: string }[];
+
+    for (const item of items) expect(item.item).toMatch(/^https:\/\/taz4tech\.com\//);
+  });
+
+  it('keeps the order it was given', () => {
+    const data = buildBreadcrumbStructuredData(crumbs, 'https://taz4tech.com');
+    const items = data.itemListElement as { name: string }[];
+
+    expect(items.map((item) => item.name)).toEqual(['Taz4Tech', 'Products', 'Lenovo IdeaPad 3']);
+  });
+
+  it('handles a trail of one without inventing anything', () => {
+    const data = buildBreadcrumbStructuredData(
+      [{ name: 'Taz4Tech', path: '/en' }],
+      'https://x.test',
+    );
+    expect((data.itemListElement as unknown[]).length).toBe(1);
   });
 });

@@ -102,6 +102,7 @@ export type {
   StructuredDataOptions,
 } from './application/product-structured-data';
 export {
+  buildBreadcrumbStructuredData,
   buildProductStructuredData,
   productPath,
   productUrl,

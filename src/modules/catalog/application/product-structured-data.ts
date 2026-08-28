@@ -118,3 +118,31 @@ export const buildProductStructuredData = (
       : {}),
   };
 };
+
+/**
+ * The trail a crawler shows under a search result.
+ *
+ * `BreadcrumbList` is what turns "taz4tech.com › en › products › lenovo..." in a
+ * Google result into "Taz4Tech › Products › Lenovo IdeaPad 3". It is a separate
+ * generator from the product data above because it is a separate schema with its
+ * own required shape — merging them into one builder would mean one function
+ * whose output is wrong in two ways at once.
+ *
+ * Positions are 1-based, and every item carries an absolute URL including the
+ * last: the guidance says the final crumb may omit `item`, but supplying it is
+ * accepted and means the list validates identically whether it is the product
+ * page or a listing.
+ */
+export const buildBreadcrumbStructuredData = (
+  crumbs: readonly { readonly name: string; readonly path: string }[],
+  siteUrl: string,
+): Record<string, unknown> => ({
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: crumbs.map((crumb, index) => ({
+    '@type': 'ListItem',
+    position: index + 1,
+    name: crumb.name,
+    item: absoluteUrl(siteUrl, crumb.path),
+  })),
+});

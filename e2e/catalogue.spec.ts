@@ -92,16 +92,23 @@ test.describe('product detail', () => {
   test('emits valid Product JSON-LD', async ({ page }) => {
     await page.goto('/en/products/lenovo-ideapad-3');
 
-    const raw = await page.locator('script[type="application/ld+json"]').textContent();
-    expect(raw).not.toBeNull();
+    /*
+     * Picked out by type, not by position. The page emits a BreadcrumbList
+     * alongside the Product, and asking for "the JSON-LD block" once there are
+     * two is a strict-mode failure — and, if it were not, a test that silently
+     * starts asserting about whichever block happens to come first.
+     */
+    const blocks = await page.locator('script[type="application/ld+json"]').allTextContents();
+    const data = blocks
+      .map((block) => JSON.parse(block) as Record<string, unknown>)
+      .find((block) => block['@type'] === 'Product');
 
-    const data = JSON.parse(raw ?? '{}') as Record<string, unknown>;
-    expect(data['@type']).toBe('Product');
-    expect(data.name).toBe('Lenovo IdeaPad 3');
+    expect(data, 'no Product JSON-LD on the page').toBeDefined();
+    expect(data?.name).toBe('Lenovo IdeaPad 3');
 
     // A multi-variant product must advertise the real span, or Merchant Center
     // sees a price mismatch against the landing page.
-    const offers = data.offers as Record<string, unknown>;
+    const offers = data?.offers as Record<string, unknown>;
     expect(offers['@type']).toBe('AggregateOffer');
     expect(offers.lowPrice).toBe('1199.00');
     expect(offers.highPrice).toBe('1399.00');

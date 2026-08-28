@@ -123,6 +123,18 @@ const main = async (): Promise<void> => {
           width: 800,
           height: 600,
         },
+        // A second picture, because a gallery with one image exercises nothing:
+        // no thumbnail strip, no ?image= link, no "which one am I looking at".
+        {
+          kind: 'image',
+          url: '/media/laptop-side.png',
+          alt: {
+            en: 'Lenovo IdeaPad 3, closed, from the side',
+            ar: 'لينوفو ايديا باد 3، مغلق، من الجانب',
+          },
+          width: 800,
+          height: 600,
+        },
       ],
       specs: [
         { name: { en: 'Processor' }, value: { en: 'AMD Ryzen 5 5500U' }, group: 'Performance' },
