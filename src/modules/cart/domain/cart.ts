@@ -238,17 +238,20 @@ const toBase64Url = (value: string): string =>
     .replaceAll('/', '_')
     .replaceAll('=', '');
 
+/**
+ * Decode, or say the value was not ours.
+ *
+ * There used to be a loop here checking every character against the base64url
+ * alphabet before decoding. It is gone, and mutation testing is why: sixteen
+ * separate changes to that loop — inverting its comparisons, emptying its body,
+ * deleting it outright — left every test passing, because `atob` already throws
+ * on anything outside the alphabet and the catch below already answers null.
+ *
+ * Sixteen mutants nothing could kill is not a coverage gap. It is a statement
+ * that the code has no observable behaviour of its own, and the honest response
+ * is to delete it rather than to write tests that assert nothing.
+ */
 const fromBase64Url = (value: string): string | null => {
-  for (const character of value) {
-    const allowed =
-      (character >= 'A' && character <= 'Z') ||
-      (character >= 'a' && character <= 'z') ||
-      (character >= '0' && character <= '9') ||
-      character === '-' ||
-      character === '_';
-    if (!allowed) return null;
-  }
-
   try {
     const bytes = Uint8Array.from(atob(value.replaceAll('-', '+').replaceAll('_', '/')), (c) =>
       c.charCodeAt(0),

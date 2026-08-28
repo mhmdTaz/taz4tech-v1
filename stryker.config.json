@@ -6,7 +6,7 @@
     "configFile": "vitest.mutation.config.ts",
     "related": false
   },
-  "reporters": ["html", "clear-text", "progress"],
+  "reporters": ["html", "json", "clear-text", "progress"],
   "htmlReporter": {
     "fileName": "stryker-report/index.html"
   },
@@ -14,10 +14,13 @@
   "mutate": ["src/modules/*/domain/**/*.ts", "!src/modules/*/domain/**/*.test.ts"],
   "thresholds": {
     "high": 95,
-    "low": 90,
-    "break": 90
+    "low": 92,
+    "break": 92
   },
   "timeoutMS": 20000,
   "concurrency": 4,
-  "tempDirName": "node_modules/.stryker-tmp"
+  "tempDirName": "node_modules/.stryker-tmp",
+  "jsonReporter": {
+    "fileName": "stryker-report/mutation.json"
+  }
 }
