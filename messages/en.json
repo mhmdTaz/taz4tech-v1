@@ -204,9 +204,10 @@
     "afterHeading": "After the delivery",
     "afterBody": "Call us within seven days and we will arrange a replacement or give back what you paid. Keep the box and everything that came inside it.",
     "notHeading": "What we cannot take back",
-    "notBody": "Anything damaged after it was delivered, and anything returned without the cables, chargers or accessories it came with.",
+    "notBody": "Anything you damaged after it was delivered, and anything returned without the cables, chargers or accessories it came with. A fault that appears on its own is not damage — tell us and we will look at it.",
+    "rightsNote": "These are our own promises. They are not a limit on your legal rights.",
     "howHeading": "How to start one",
-    "howBody": "Call us with your order number. It looks like T4T-26-000042 and it is on the confirmation page we sent you.",
+    "howBody": "Call us with your order number. It looks like T4T-26-000042 and it is shown on the confirmation page right after you order — write it down, because nothing is sent to you afterwards. If you do not have it, the phone number you ordered with is enough to find your order.",
     "contactLink": "How to reach us"
   },
   "terms": {
@@ -214,7 +215,7 @@
     "title": "Terms of sale",
     "intro": "How buying from this shop works, in plain terms.",
     "whoHeading": "Who you are buying from",
-    "whoBody": "Taz4Tech, an electronics shop selling to customers in Lebanon. Our name, registration and phone number are at the bottom of every page.",
+    "whoBody": "Taz4Tech, an electronics shop selling to customers in Lebanon. Our name and phone number are at the bottom of every page, and our commercial registration number appears there once the business is registered.",
     "pricesHeading": "Prices",
     "pricesBody": "Prices are in US dollars and include VAT where it applies. The price you see at checkout is the price your order is written with — if a price changes afterwards, it does not change an order already placed.",
     "orderHeading": "Placing an order",
@@ -223,6 +224,8 @@
     "paymentBody": "Cash on delivery only, paid to the driver in US dollars. We do not take card payments, and nobody from this shop will ever ask you for card or bank details.",
     "cancelHeading": "Cancelling",
     "cancelBody": "Call us before the driver leaves and we will cancel the order at no cost to you.",
+    "rightsHeading": "Your legal rights",
+    "rightsBody": "Everything on this page and on the returns page is what this shop promises you. None of it reduces the rights Lebanese consumer protection law gives you, and where the two differ, the law is what counts.",
     "changesHeading": "Changes to these terms",
     "changesBody": "If these terms change, the version on this page is the one that applies to orders placed after it appears. An order already placed keeps the terms it was placed under."
   },

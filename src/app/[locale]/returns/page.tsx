@@ -35,6 +35,12 @@ export default async function ReturnsPage({ params }: PageProps) {
 
       <Section heading={t('notHeading')}>
         <p>{t('notBody')}</p>
+        {/*
+          Here rather than at the foot of the page: this is the section a
+          customer reads as taking something away, so it is where the sentence
+          saying it does not belongs.
+        */}
+        <p>{t('rightsNote')}</p>
       </Section>
 
       <Section heading={t('howHeading')}>

@@ -27,6 +27,9 @@ export default async function TermsPage({ params }: PageProps) {
     ['orderHeading', 'orderBody'],
     ['paymentHeading', 'paymentBody'],
     ['cancelHeading', 'cancelBody'],
+    // Before the closing section on purpose: a customer who stops reading after
+    // the promises should already have read that the promises are a floor.
+    ['rightsHeading', 'rightsBody'],
     ['changesHeading', 'changesBody'],
   ] as const;
 
