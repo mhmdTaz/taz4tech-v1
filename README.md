@@ -872,9 +872,12 @@ That looks inconsistent until you look at what each waits on. The header reads a
 cookie, which is instant, so its boundary resolves before the response flushes.
 The footer waits on a database round trip — so React flushes the fallback and
 streams the real content in afterwards with an inline script, and **a browser
-with JavaScript disabled never sees it at all**. That is merely annoying for a
-product grid. For the one place the shop states its legal identity, a disclosure
-that needs JavaScript is not a disclosure.
+with JavaScript disabled never sees it at all**. For the one place the shop
+states its legal identity, a disclosure that needs JavaScript is not a
+disclosure.
+
+That was written here as *merely annoying for a product grid*, which turned out
+to be wrong twice over — see below.
 
 This was found rather than reasoned about: the e2e spec loads a page with
 JavaScript off and reads the footer out of the HTML, and it failed. The cost of
@@ -893,6 +896,60 @@ summary gets for free from the boundary around it. **`pnpm build:offline`** is
 that failure kept as a command: the same build with nothing listening, so the
 next component that reads a database at build time is caught here rather than in
 a pipeline.
+
+### And then the same wall, at the product listing
+
+The listing grid sat behind the same kind of boundary for the same reason, and
+this file called it *merely annoying*. It was wrong on both halves.
+
+**A listing that needs JavaScript is not a listing.** The footer argument does
+not stop at legal disclosures. `/products` is the page a customer reaches from
+the hero, from the header, and from every search engine result for "laptop
+Lebanon" — and with JavaScript off it showed a skeleton and eight grey
+rectangles, permanently. Every tile was in the HTML. None of it was on screen.
+
+**And it was not only people who choose to disable JavaScript.** The swap needs
+the inline script to arrive and run. On a Lebanese mobile connection that is not
+a hypothetical, and the failure is silent: no error, no empty state, just a page
+that never finishes loading something it already has.
+
+The boundary is gone. `ProductGrid` renders directly, exactly as the collection
+page has always rendered it — the listing was the odd one out rather than the
+pattern, which is the part that should have been noticed sooner.
+
+**What it costs, measured rather than assumed.** Nothing stopped being
+prerendered: every route under this layout was already server-rendered on demand
+because of the footer. What changes is that the response waits on one indexed
+query before it starts instead of sending a heading first. Warm, that is 15–23 ms
+to first byte for the whole page; cold, 332 ms. Lighthouse gates the rest on
+every PR.
+
+#### The test that proved nothing, twice
+
+The point of the new e2e is to fail if the boundary comes back. It did not.
+
+First run: green with the boundary restored. The reason is the one this file
+already complains about in another section — Playwright's `webServer` reuses a
+server already on the port, so it was testing the previous build. Rebuilding
+without stopping the old server proves whatever was running before.
+
+Second run, with the server rebuilt and restarted properly: **still green**,
+because on a warm database the query resolved before the shell flushed and React
+inlined the grid rather than deferring it. The bug is real and intermittent — it
+appears when the query is slow enough, which is the cold start, the loaded
+server, and the Atlas round trip, and never the laptop the test runs on.
+
+What settled it was the raw HTML rather than the rendered page. With the
+boundary, the first hidden streaming container opens at byte 6967 and the
+product first appears at 49377 — inside it, with a loading placeholder above.
+Without, the product is at 10274 and the first hidden container does not open
+until 17294. The difference is structural and does not depend on how fast
+anything ran.
+
+With that understood, the behavioural test does hold: rebuilt correctly and
+restarted, the no-JS specs fail against the boundary build and pass without it.
+**A test that has never been watched failing is a test with an unknown
+relationship to the bug** — and this one had two separate reasons to be green.
 
 **The delivery page prices itself.** The eight governorate fees are read from
 store settings, so the page a customer reads and the number checkout charges
@@ -1527,15 +1584,6 @@ conflict still throws: a dropped connection must never be reported as
 - **VAT.** 11% is configured. Whether this store must register depends on the
   LBP 5bn threshold; advisory sources claim importers must register regardless of
   turnover, but that is not primary-sourced and needs a Lebanese tax adviser.
-- **The listing is invisible without JavaScript.** The grid sits behind a
-  Suspense boundary and React swaps streamed content in with an inline script, so
-  a JS-disabled browser sits on the skeleton. The markup is all in the response,
-  so a crawler that does not execute JavaScript still sees every tile. Removing
-  the boundary would block the page shell on a database query; keeping it leaves
-  the one place the storefront does not keep its no-JS promise. The footer hit
-  the same wall and was decided the other way — a legal disclosure that needs
-  JavaScript is not a disclosure — which is the argument for looking at the
-  listing again rather than for leaving it.
 - **Delivery is $4.00 to every governorate, and that is a starting number.** It
   was set from `pnpm delivery:price 4.00` rather than from deliveries that have
   actually happened, so it is the first honest guess and not a finding. Akkar and
