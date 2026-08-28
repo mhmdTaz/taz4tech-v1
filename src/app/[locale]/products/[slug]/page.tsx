@@ -4,14 +4,15 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { cache } from 'react';
+import { cache, Suspense } from 'react';
 import { getContainer } from '@/composition';
 import { readCart } from '../../cart/cookie';
 import { ProductDetail } from './product-detail';
+import { RelatedProducts } from './related-products';
 
 type PageProps = {
   params: Promise<{ locale: string; slug: string }>;
-  searchParams: Promise<{ variant?: string }>;
+  searchParams: Promise<{ variant?: string; image?: string }>;
 };
 
 /**
@@ -74,7 +75,7 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
   // Reads a database, so it must not be prerendered at build time.
   await connection();
 
-  const { variant } = await searchParams;
+  const { variant, image } = await searchParams;
   const product = await loadProduct(slug);
 
   // Draft, archived and non-existent all render the same 404 on the storefront.
@@ -93,13 +94,35 @@ export default async function ProductPage({ params, searchParams }: PageProps) {
   const cart = await readCart();
   const cartQuantity = new Map(cart.lines.map((line) => [line.sku, line.quantity]));
 
+  /*
+   * Parsed here, clamped in the component. `Number('two')` is NaN and
+   * `Number('')` is 0, so anything unreadable becomes undefined and the gallery
+   * falls back to the first picture rather than to an empty frame.
+   */
+  const imageIndex = image === undefined ? undefined : Number.parseInt(image, 10);
+  const selectedImage =
+    imageIndex !== undefined && Number.isSafeInteger(imageIndex) ? imageIndex : undefined;
+
   return (
-    <ProductDetail
-      product={product}
-      locale={locale as Locale}
-      stock={stock}
-      cartQuantity={cartQuantity}
-      {...(variant === undefined ? {} : { selectedSku: variant })}
-    />
+    <>
+      <ProductDetail
+        product={product}
+        locale={locale as Locale}
+        stock={stock}
+        cartQuantity={cartQuantity}
+        {...(variant === undefined ? {} : { selectedSku: variant })}
+        {...(selectedImage === undefined ? {} : { selectedImage })}
+      />
+
+      {/*
+        Below the product, behind its own boundary: a second query for "more from
+        this brand" must never delay the thing the customer came to read.
+      */}
+      <div className="mx-auto max-w-6xl px-6 pb-16">
+        <Suspense fallback={null}>
+          <RelatedProducts product={product} locale={locale as Locale} />
+        </Suspense>
+      </div>
+    </>
   );
 }

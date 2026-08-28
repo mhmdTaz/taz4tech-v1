@@ -261,6 +261,79 @@ store settings are real configuration, three fake laptops are not. The fixtures
 cover the awkward shapes on purpose — an incomplete variant matrix, a live offer,
 a product with no imagery, and a draft that must stay hidden.
 
+## The product page as a shop front
+
+The page was already correct — variants, stock, offers, structured data — and it
+showed one picture with no way to see the others, no path back out, and nothing
+to look at next.
+
+**The gallery is a URL, like the variant picker beside it.** `?image=2` is
+shareable, crawlable, survives a reload and works with JavaScript disabled or
+still downloading. That is not a coincidence; it is the same decision the variant
+picker made, for the same reasons, and a gallery built on client state would have
+been the one part of the storefront that broke the rule.
+
+Three details that are not obvious:
+
+- **Every thumbnail is shown, including the one on display.** A strip that
+  removes the current image reshuffles as you move through it, and you lose your
+  place. The current one is marked with `aria-current` rather than dropped.
+- **The chosen variant rides along.** Changing picture keeps `?variant=`, because
+  silently resetting somebody's colour and size shows up later as an order for
+  the wrong SKU.
+- **Image 0 omits the parameter.** The first picture is the bare product URL —
+  the one that is canonical and the one that gets shared — so there is never a
+  second URL for the same page.
+
+The index is **clamped, not validated**: `?image=99`, `?image=-1` and
+`?image=two` all show the first picture. A query string a customer can edit
+should never be able to produce a page with no photograph on it.
+
+### The breadcrumb
+
+An ordered list, because the order is the information — it is a path — and the
+last crumb is the page you are on, marked `aria-current` and not a link to
+itself. The separators are decoration and hidden from screen readers, so a
+breadcrumb is not read out as "Home slash Products slash".
+
+It is also published as `BreadcrumbList` JSON-LD, which is what turns
+`taz4tech.com › en › products › lenovo-ideapad-3` in a search result into
+**Taz4Tech › Products › Lenovo IdeaPad 3**. Every item carries an absolute URL:
+Google ignores a relative `item` exactly as it ignores a relative canonical —
+silently, while the markup looks perfectly correct.
+
+**Two script blocks, not one `@graph`.** Both are valid, and two means a
+malformed Product cannot take the BreadcrumbList down with it — the breadcrumb
+being the one that actually appears in the result.
+
+### More from the same brand
+
+Brand, not a recommendation engine. A shop with a few hundred products and no
+purchase history has nothing to build a recommendation from, and the brand is
+what somebody looking at a Lenovo laptop is most likely to want more of. The
+heading says so — *More from Lenovo* — rather than implying a cleverness that is
+not there.
+
+A product with no brand gets no strip at all. There is no honest fallback
+heading for four products that have nothing in common.
+
+It asks for one more product than it shows, because the product being read is
+almost certainly in its own results; asking for four and filtering would leave
+three whenever it is. And it sits behind its own Suspense boundary, so a second
+query never delays the product the customer came to read.
+
+### What the fixtures could not do
+
+The demo catalogue has three active products under three different brands, and
+the collections spec pins their counts exactly — so a fourth active product
+breaks two assertions somewhere else. The related-products test therefore imports
+its own pair under a brand nothing else uses, publishes them, and archives them
+again, which is the same shape the stock spec has used since Phase 2.
+
+The Lenovo fixture did gain a second image, because that costs no count anywhere
+and a one-image gallery exercises nothing at all: no strip, no `?image=` link, no
+question of which one you are looking at.
+
 ## The home page
 
 It used to be the Phase 0 skeleton: an eyebrow reading `Phase 0 · skeleton`, and

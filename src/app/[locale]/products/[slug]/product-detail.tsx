@@ -1,4 +1,5 @@
 import {
+  buildBreadcrumbStructuredData,
   buildProductStructuredData,
   defaultVariant,
   findVariant,
@@ -33,6 +34,7 @@ export const ProductDetail = async ({
   stock,
   cartQuantity,
   selectedSku,
+  selectedImage,
 }: {
   product: Product;
   locale: Locale;
@@ -41,6 +43,8 @@ export const ProductDetail = async ({
   /** SKU -> how many are already in the cart. */
   cartQuantity: ReadonlyMap<string, number>;
   selectedSku?: string;
+  /** Which picture the gallery is showing, from `?image=`. Clamped, never trusted. */
+  selectedImage?: number;
 }) => {
   const t = await getTranslations({ locale, namespace: 'products' });
   const now = new Date();
@@ -50,7 +54,21 @@ export const ProductDetail = async ({
 
   const onOffer = isOnOffer(selected, now);
   const images = product.media.filter((item) => item.kind === 'image');
-  const hero = images[0];
+
+  /*
+   * The gallery is a URL, like the variant picker beside it.
+   *
+   * `?image=2` is shareable, crawlable, survives a reload and works with no
+   * JavaScript — the same reasons variant selection is a link rather than client
+   * state. The index is clamped rather than validated: `?image=99` shows the
+   * first picture, because a query string a customer can edit should never be
+   * able to produce a page with no photograph on it.
+   */
+  const imageIndex =
+    selectedImage !== undefined && selectedImage >= 0 && selectedImage < images.length
+      ? selectedImage
+      : 0;
+  const hero = images[imageIndex];
 
   const selectedAvailability = availabilityOf(stock.get(selected.sku) ?? null);
   const unitsLeft = countToShow(stock.get(selected.sku) ?? null);
@@ -67,7 +85,14 @@ export const ProductDetail = async ({
     (variant) => availabilityOf(stock.get(variant.sku) ?? null) === 'in_stock',
   );
 
+  const crumbs = [
+    { name: t('home'), path: `/${locale}` },
+    { name: t('title'), path: `/${locale}/products` },
+    { name: textFor(product.title, locale), path: productPath(locale, product.slug) },
+  ];
+
   const { config } = await getContainer();
+  const breadcrumbData = buildBreadcrumbStructuredData(crumbs, config.siteUrl);
   const structuredData = buildProductStructuredData(
     product,
     {
@@ -80,13 +105,41 @@ export const ProductDetail = async ({
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-12 px-6 py-16">
+      {/*
+        An ordered list, not a row of links. The order IS the information — it is
+        a path — and a screen reader announcing "list of 3" then walking it is
+        how a breadcrumb is meant to be heard. The separators are decoration and
+        marked as such, so they are not read aloud between every crumb.
+      */}
       <nav aria-label={t('breadcrumb')} className="text-sm">
-        <a
-          href={`/${locale}/products`}
-          className="text-muted underline-offset-4 hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          {t('title')}
-        </a>
+        <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          {crumbs.map((crumb, index) => {
+            const last = index === crumbs.length - 1;
+
+            return (
+              <li key={crumb.path} className="flex items-center gap-2">
+                {index > 0 && (
+                  <span aria-hidden="true" className="text-faint">
+                    /
+                  </span>
+                )}
+                {last ? (
+                  // The page you are on is not a link to itself.
+                  <span aria-current="page" className="text-faint">
+                    {crumb.name}
+                  </span>
+                ) : (
+                  <a
+                    href={crumb.path}
+                    className="text-muted underline-offset-4 hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  >
+                    {crumb.name}
+                  </a>
+                )}
+              </li>
+            );
+          })}
+        </ol>
       </nav>
 
       <div className="grid gap-12 lg:grid-cols-2">
@@ -113,21 +166,34 @@ export const ProductDetail = async ({
           </div>
 
           {images.length > 1 && (
+            /*
+              Every image, including the one on show, so the strip does not
+              reshuffle as you move through it — a gallery whose thumbnails
+              change position when you click one is a gallery you lose your place
+              in. The current one is marked rather than removed.
+            */
             <ul className="grid grid-cols-4 gap-3">
-              {images.slice(1).map((image) => (
-                <li
-                  key={image.url}
-                  className="relative aspect-square overflow-hidden rounded-lg border border-hairline bg-raised"
-                >
-                  <Image
-                    src={image.url}
-                    alt={textFor(image.alt, locale)}
-                    fill
-                    sizes="120px"
-                    className="object-cover"
-                  />
-                </li>
-              ))}
+              {images.map((image, index) => {
+                const current = index === imageIndex;
+
+                return (
+                  <li key={image.url}>
+                    <a
+                      href={galleryHref(locale, product.slug, index, selectedSku)}
+                      aria-current={current ? 'true' : undefined}
+                      // The alt text is on the picture; the link needs to say
+                      // what it DOES, or a screen reader hears the same product
+                      // description four times with no way to tell them apart.
+                      aria-label={t('viewImage', { index: index + 1 })}
+                      className={`relative block aspect-square overflow-hidden rounded-lg border bg-raised transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                        current ? 'border-accent' : 'border-hairline hover:border-accent-dim'
+                      }`}
+                    >
+                      <Image src={image.url} alt="" fill sizes="120px" className="object-cover" />
+                    </a>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
@@ -302,8 +368,43 @@ export const ProductDetail = async ({
           __html: JSON.stringify(structuredData).replaceAll('<', '\\u003c'),
         }}
       />
+
+      {/*
+        A second block rather than one @graph. Both are valid, and two means a
+        malformed Product cannot take the BreadcrumbList down with it — the
+        breadcrumb being the one that actually shows up in the search result.
+      */}
+      <script
+        type="application/ld+json"
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: serialised domain data, "<" escaped
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(breadcrumbData).replaceAll('<', '\\u003c'),
+        }}
+      />
     </main>
   );
+};
+
+/**
+ * A link to one picture, carrying the chosen variant along.
+ *
+ * Dropping `?variant=` while changing image would silently reset a customer's
+ * colour and size, which is the kind of thing that only shows up as an order for
+ * the wrong SKU. Image 0 omits the parameter entirely so the first picture is
+ * the bare product URL — the one that gets shared and the one that is canonical.
+ */
+const galleryHref = (
+  locale: Locale,
+  slug: string,
+  index: number,
+  selectedSku: string | undefined,
+): string => {
+  const query = new URLSearchParams();
+  if (selectedSku !== undefined) query.set('variant', selectedSku);
+  if (index > 0) query.set('image', String(index));
+
+  const path = productPath(locale, slug);
+  return query.size === 0 ? path : `${path}?${query.toString()}`;
 };
 
 /**

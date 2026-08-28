@@ -64,7 +64,12 @@
     "quickViewHint": "A summary. The full page has specifications and every photo.",
     "inStock": "In stock",
     "outOfStock": "Out of stock",
-    "unitsLeft": "Only {count} left"
+    "unitsLeft": "Only {count} left",
+    "imageOf": "Image {index} of {total}",
+    "viewImage": "Show image {index}",
+    "home": "Home",
+    "relatedHeading": "More from {brand}",
+    "relatedFallback": "More like this"
   },
   "collections": {
     "title": "Collections",

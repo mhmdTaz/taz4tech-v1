@@ -64,7 +64,12 @@
     "quickViewHint": "ملخّص. الصفحة الكاملة تحتوي على المواصفات وجميع الصور.",
     "inStock": "متوفر",
     "outOfStock": "غير متوفر",
-    "unitsLeft": "بقي {count} فقط"
+    "unitsLeft": "بقي {count} فقط",
+    "imageOf": "الصورة {index} من {total}",
+    "viewImage": "أظهر الصورة {index}",
+    "home": "الرئيسية",
+    "relatedHeading": "المزيد من {brand}",
+    "relatedFallback": "منتجات مشابهة"
   },
   "collections": {
     "title": "المجموعات",

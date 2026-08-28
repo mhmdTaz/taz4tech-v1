@@ -64,7 +64,12 @@
     "quickViewHint": "Un résumé. La fiche complète contient les caractéristiques et toutes les photos.",
     "inStock": "En stock",
     "outOfStock": "Rupture de stock",
-    "unitsLeft": "Plus que {count}"
+    "unitsLeft": "Plus que {count}",
+    "imageOf": "Image {index} sur {total}",
+    "viewImage": "Afficher l'image {index}",
+    "home": "Accueil",
+    "relatedHeading": "Autres produits {brand}",
+    "relatedFallback": "Dans le même genre"
   },
   "collections": {
     "title": "Collections",
