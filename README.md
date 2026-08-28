@@ -130,6 +130,23 @@ docker run -d --rm --name taz4tech-mongo -p 27017:27017 mongo:8.0
 MONGODB_TEST_URI=mongodb://127.0.0.1:27017 pnpm test:integration
 ```
 
+### Reseed before a local e2e run
+
+CI gets a fresh MongoDB service per job and seeds it. This machine does not: the
+e2e database accumulates every order the suite has ever placed, and orders take
+stock.
+
+After a day of runs it held **1,992 orders**, the cable was sold out, and two
+specs failed in ways that pointed nowhere near the cause — a `waitForURL`
+timeout in a helper (checkout refused, so there was no redirect to wait for) and
+a settings assertion behind it. Both passed on a fresh database. If a spec that
+places an order starts timing out for no reason, this is the first thing to
+check.
+
+```bash
+MONGODB_URI=mongodb://127.0.0.1:27017 MONGODB_DB=taz4tech_e2e STORE_ID=taz4tech   SITE_URL=http://127.0.0.1:3000 pnpm seed --reset && pnpm seed:demo
+```
+
 ### Why `pnpm test:e2e` builds first
 
 Playwright's `webServer` runs `pnpm start`, which serves whatever is already in
@@ -867,17 +884,17 @@ changing the shop's phone number is one form and not a deploy. The registry line
 appears only once there is a number to show, because an empty label is clutter
 rather than compliance.
 
-**The footer is deliberately not behind a Suspense boundary, and the header is.**
-That looks inconsistent until you look at what each waits on. The header reads a
-cookie, which is instant, so its boundary resolves before the response flushes.
-The footer waits on a database round trip — so React flushes the fallback and
-streams the real content in afterwards with an inline script, and **a browser
-with JavaScript disabled never sees it at all**. For the one place the shop
-states its legal identity, a disclosure that needs JavaScript is not a
-disclosure.
+**The footer is deliberately not behind a Suspense boundary.** It waits on a
+database round trip, so behind one React flushes the fallback and streams the
+real content in afterwards with an inline script, and **a browser with
+JavaScript disabled never sees it at all**. For the one place the shop states
+its legal identity, a disclosure that needs JavaScript is not a disclosure.
 
-That was written here as *merely annoying for a product grid*, which turned out
-to be wrong twice over — see below.
+The header kept its boundary at the time, on the grounds that reading a cookie
+is instant so it would resolve before the flush anyway. Both halves of that
+sentence turned out to be wrong — *merely annoying for a product grid*, and
+*instant, so it resolves in time*. See below; there are no boundaries left under
+this layout.
 
 This was found rather than reasoned about: the e2e spec loads a page with
 JavaScript off and reads the footer out of the HTML, and it failed. The cost of
@@ -950,6 +967,38 @@ With that understood, the behavioural test does hold: rebuilt correctly and
 restarted, the no-JS specs fail against the boundary build and pass without it.
 **A test that has never been watched failing is a test with an unknown
 relationship to the bug** — and this one had two separate reasons to be green.
+
+### And the skip link, which the listing fix broke
+
+Removing the grid's boundary moved when the header's boundary resolved relative
+to the flush — and the header carries the **skip link**, the first thing a
+keyboard user reaches.
+
+When the cookie read lost that race, the initial HTML had no skip link at all,
+and the first Tab landed in the listing's search box instead. The e2e caught it
+on the very next full run, in both projects: `expect(skip link).toBeFocused()`
+against a page where it was not yet present.
+
+Two things about it are worth keeping:
+
+**It was intermittent, and only on `/products`.** A probe across four routes,
+three attempts each, failed twice — both on the listing, none anywhere else.
+`document.activeElement` after the Tab said `INPUT` rather than the skip link,
+which is what turned a timing guess into a diagnosis.
+
+**The boundary was justified by something that was no longer true.** The comment
+said it protected a prerendered per-locale shell. There is no prerendered shell:
+every route under this layout is server-rendered on demand, because the footer
+reads the database. The boundary was buying nothing and costing the one thing it
+wrapped — and the reasoning that put it there, *reading a cookie is instant so
+it resolves before the flush*, is the same timing assumption the listing had
+already disproved one section earlier.
+
+There are no Suspense boundaries left under this layout. Each was removed for
+its own reason and the reasons rhyme: **a boundary buys an earlier first paint,
+and charges for it by making the content inside conditional on having arrived in
+time.** For a legal disclosure, a product listing, and a skip link, that price
+was wrong three times.
 
 **The delivery page prices itself.** The eight governorate fees are read from
 store settings, so the page a customer reads and the number checkout charges
@@ -1086,6 +1135,52 @@ so it is in front of the customer at the moment they choose, with no JavaScript
 and no reload. The order itself is always priced from the region that was
 actually posted, so the total on the confirmation is never a number the checkout
 page invented.
+
+### The confirmation URL is a capability, not a lookup
+
+`/en/checkout/T4T-26-000042` used to be the whole credential, and order numbers
+are **sequential**. Anyone who could count could read a stranger's name, phone
+number and street address, one number at a time, for as long as they cared to.
+This file said so, and left it open on the grounds that fixing it would break
+confirmations already pasted into WhatsApp threads.
+
+It is fixed, and nothing broke.
+
+**The number identifies the order; a token authorises reading it.** Every order
+now carries a `viewToken` — 130 bits from the CSPRNG, stored on the document,
+handed out exactly once in the redirect after checkout, and compared in constant
+time. The URL becomes `…/T4T-26-000042?t=<token>`, which still survives a
+reload, a paste into WhatsApp, and being opened by whoever is actually paying.
+
+It is a stored random token rather than an HMAC of the order number, for three
+reasons. There is no new secret to add to the environment and lose. There is no
+rotation that would invalidate every link at once. And a token that exists as a
+row can be reasoned about per order, where a signature is a property of the
+whole system.
+
+**A wrong token is a 404, not a 403.** Identical to an order that was never
+placed. *Forbidden* would confirm that T4T-26-000042 is real — the single fact
+enumeration is after — and would turn the page into an oracle for how many
+orders the shop has taken. The e2e asserts the two responses are the same.
+
+**Orders written before the field exist without one**, read back as `null`, and
+are still readable. Their links are in people's messages and cannot be reissued.
+It is a hole that stops growing rather than one that stays open, and the
+alternative — a required field on the schema — would have made every one of
+those orders *unopenable* rather than merely readable, which is a worse bug than
+the one being fixed. The integration suite pins both halves: a document with no
+token reads back as null, and one with a token round-trips unchanged.
+
+**The token is not logged.** The line written when an order is placed already
+carries the order number; adding the token would put a live credential in a log
+file, which is where credentials go to be copied.
+
+#### The test that has been watched failing
+
+The gate was removed on purpose, the app rebuilt, and both new specs failed —
+the bare URL returned 200 and served the address. Put back, they pass. A
+security test that has only ever been green has an unknown relationship to the
+thing it claims to prevent.
 
 ## The cart
 
@@ -1599,12 +1694,12 @@ conflict still throws: a dropped connection must never be reported as
   it starts — so the fix is procedural as much as technical: **copy the failure
   directory before re-running**. Until one is caught with its report intact,
   neither has a diagnosis, and neither should be assumed gone.
-- **The order confirmation URL is guessable.** `/checkout/T4T-26-000042` is
-  sequential, and it shows a name, a phone number and an address. There are no
-  accounts, so the URL is the only handle a customer has on their order; a signed
-  token in the link would fix it and would also break every confirmation already
-  pasted into a WhatsApp thread. Worth deciding before the shop is busy enough for
-  the numbers to be worth walking.
+
+  There is now a candidate, though it is not evidence: the local e2e database is
+  never reset, and a full one produced two unrelated-looking failures during
+  this pass. Both original flakes were on a machine that had run the suite
+  repeatedly. Worth ruling in or out the next time one appears — the procedure
+  above is what makes that possible.
 - **28 mutants survive on the domain layer, and every one has an argument.** The
   score is 97.79% against a floor of 97, so it cannot regress. Every module has
   had its pass; `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%. Of

@@ -107,6 +107,8 @@ const placer = (
       storeId: 'taz4tech',
       now: () => NOW,
       nextId: () => `ORDER${String(++counter).padStart(21, '0')}` as EntityId<'Order'>,
+      // Predictable, so a test can assert on the confirmation URL it produces.
+      nextViewToken: () => `TOKEN${String(counter).padStart(21, '0')}`,
     }),
   };
 };

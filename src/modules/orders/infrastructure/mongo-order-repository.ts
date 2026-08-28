@@ -54,6 +54,13 @@ const DocumentSchema = z.object({
   deliveryFee: MONEY,
   total: MONEY,
   idempotencyKey: z.string().min(1),
+  /*
+   * Nullable and defaulted, because orders written before this field existed
+   * have no token and their confirmation links are already in people's
+   * messages. Reading one back as null is how the page knows to let it through;
+   * see the note on Order.viewToken.
+   */
+  viewToken: z.string().min(1).nullable().default(null),
   placedAt: z.date(),
   updatedAt: z.date(),
 });
@@ -100,6 +107,7 @@ const toDomain = (document: unknown): Order => {
     deliveryFee: money(data.deliveryFee),
     total: money(data.total),
     idempotencyKey: data.idempotencyKey,
+    viewToken: data.viewToken,
     placedAt: data.placedAt,
     updatedAt: data.updatedAt,
   };
@@ -130,6 +138,7 @@ const toDocument = (order: Order): OrderDocument => ({
   deliveryFee: { cents: order.deliveryFee.cents, currency: order.deliveryFee.currency },
   total: { cents: order.total.cents, currency: order.total.currency },
   idempotencyKey: order.idempotencyKey,
+  viewToken: order.viewToken,
   placedAt: order.placedAt,
   updatedAt: order.updatedAt,
 });

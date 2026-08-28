@@ -20,7 +20,7 @@ import { createStoreModule, deliveryFeeFor, type StoreModule } from '@modules/st
 import { type Clock, systemClock } from '@platform/clock';
 import { type Config, getConfig } from '@platform/config';
 import { createFlags, type Flags } from '@platform/flags';
-import { createIdGenerator, type IdGenerator } from '@platform/ids';
+import { createIdGenerator, createViewToken, type IdGenerator } from '@platform/ids';
 import { createLogger, type Logger } from '@platform/logger';
 import { type Db, getDb } from '@platform/mongo';
 import { err, ok } from '@platform/result';
@@ -185,6 +185,7 @@ export const buildContainer = async (): Promise<Container> => {
     },
     now: () => clock.now(),
     nextId: () => ids.next(),
+    nextViewToken: createViewToken,
   });
 
   await Promise.all([

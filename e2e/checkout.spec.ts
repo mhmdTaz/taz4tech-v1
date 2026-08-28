@@ -95,7 +95,8 @@ test.describe('placing an order', () => {
     await fill(page);
     await submit(page);
 
-    await expect(page).toHaveURL(/\/en\/checkout\/T4T-\d{2}-\d{6}$/);
+    // The token comes with it: the order number alone no longer opens this page.
+    await expect(page).toHaveURL(/\/en\/checkout\/T4T-\d{2}-\d{6}\?t=[0-9A-HJKMNP-TV-Z]{26}$/);
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Thank you');
 
     // The cart is cleared only AFTER the order is safely written.
@@ -157,6 +158,52 @@ test.describe('placing an order', () => {
   test('404s on an order number that does not exist', async ({ page }) => {
     const response = await page.goto('/en/checkout/T4T-99-999999');
     expect(response?.status()).toBe(404);
+  });
+
+  test('cannot be opened by anyone who merely counts to the order number', async ({ page }) => {
+    /*
+     * Order numbers are sequential, and this page carries a name, a phone
+     * number and a street address. The token in the URL is what separates the
+     * customer from a stranger working through T4T-26-000001 upwards.
+     */
+    await addToCart(page, 'anker-usb-c-cable-2m');
+    await page.goto('/en/checkout');
+    await fill(page);
+    await submit(page);
+
+    const url = new URL(page.url());
+    expect(url.searchParams.get('t'), 'no token was issued at all').toMatch(
+      /^[0-9A-HJKMNP-TV-Z]{26}$/,
+    );
+
+    // The same order, without the token.
+    const bare = await page.goto(url.pathname);
+    expect(bare?.status()).toBe(404);
+
+    // And with a token of the right shape that is simply not this order's.
+    const wrong = await page.goto(`${url.pathname}?t=${'0'.repeat(26)}`);
+    expect(wrong?.status()).toBe(404);
+  });
+
+  test('a real order with a wrong token is indistinguishable from no order', async ({ page }) => {
+    /*
+     * Both 404. A 403 on the real one would confirm that T4T-26-000042 exists,
+     * which is the single fact enumeration is after — and would make this page
+     * an oracle for how many orders the shop has taken.
+     */
+    await addToCart(page, 'anker-usb-c-cable-2m');
+    await page.goto('/en/checkout');
+    await fill(page);
+    await submit(page);
+
+    const real = new URL(page.url()).pathname;
+    const wrongToken = `?t=${'0'.repeat(26)}`;
+
+    const existing = await page.goto(`${real}${wrongToken}`);
+    const invented = await page.goto(`/en/checkout/T4T-99-999998${wrongToken}`);
+
+    expect(existing?.status()).toBe(invented?.status());
+    expect(await page.getByRole('heading', { level: 1 }).textContent()).toBeTruthy();
   });
 });
 
