@@ -1,7 +1,6 @@
 import { LOCALES, type Locale } from '@platform/locale';
 import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { Suspense } from 'react';
 import { ProductGrid } from './product-grid';
 
 type PageProps = {
@@ -42,36 +41,29 @@ export default async function ProductsPage({ params, searchParams }: PageProps) 
       </header>
 
       {/*
-        The heading is static per locale; only the grid touches the database, so
-        a slow query delays the tiles rather than blanking the page.
+        NOT behind a Suspense boundary, and that is the whole decision.
+
+        It used to be. The heading is static per locale and only the grid
+        touches the database, so streaming the tiles in afterwards let the shell
+        render immediately — and React swaps streamed content into place with an
+        inline script. With JavaScript disabled, or still downloading over a
+        Lebanese mobile connection, that swap never happens and the page sits on
+        a skeleton forever. Every tile was in the HTML; none of it was on screen.
+
+        This is the same wall the footer hit, decided the same way: a legal
+        disclosure that needs JavaScript is not a disclosure, and a product
+        listing that needs JavaScript is not a listing. The collection page has
+        always rendered this exact grid without a boundary, so the listing was
+        the odd one out rather than the pattern.
+
+        The cost is narrower than it looks. Every storefront route was already
+        dynamic — the footer's `connection()` sees to that — so nothing stopped
+        being prerendered. What changes is that the response now waits on one
+        indexed query before it starts, instead of sending a heading and
+        following it with the tiles. Lighthouse is the gate for that, and it
+        runs on every PR.
       */}
-      <Suspense fallback={<GridSkeleton label={t('loading')} />}>
-        {/*
-          The searchParams PROMISE is passed down rather than awaited here.
-          Awaiting it in the page body makes the whole route dynamic, shell and
-          all; awaited inside the boundary, only the grid is.
-        */}
-        <ProductGrid locale={locale as Locale} searchParams={searchParams} />
-      </Suspense>
+      <ProductGrid locale={locale as Locale} searchParams={searchParams} />
     </main>
   );
 }
-
-const GridSkeleton = ({ label }: { label: string }) => (
-  <div>
-    <p className="sr-only" role="status">
-      {label}
-    </p>
-    <ul
-      aria-hidden="true"
-      className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-    >
-      {[0, 1, 2, 3, 4, 5, 6, 7].map((slot) => (
-        <li
-          key={slot}
-          className="h-72 animate-pulse rounded-[var(--radius-panel)] border border-hairline bg-surface"
-        />
-      ))}
-    </ul>
-  </div>
-);

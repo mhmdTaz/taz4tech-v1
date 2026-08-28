@@ -46,6 +46,45 @@ test.describe('product listing', () => {
   }
 });
 
+test.describe('the listing without JavaScript', () => {
+  test.use({ javaScriptEnabled: false });
+
+  /*
+   * This is the test that did not exist, which is why the listing was the one
+   * page on the storefront that needed JavaScript to show anything.
+   *
+   * The grid sat behind a Suspense boundary. React streams boundary content in
+   * and puts it in place with an inline script, so every tile was in the HTML
+   * and none of it was on screen — a skeleton, forever, for anyone whose
+   * JavaScript is off or has not arrived yet.
+   */
+  test('shows the products themselves, not a skeleton', async ({ page }) => {
+    await page.goto('/en/products');
+
+    await expect(page.getByRole('link', { name: /Lenovo IdeaPad 3/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Anker USB-C/ })).toBeVisible();
+    await expect(page.getByText('Unreleased Gadget')).toHaveCount(0);
+  });
+
+  test('filters, searches and paginates, because they are all plain links', async ({ page }) => {
+    await page.goto('/en/products');
+
+    await page
+      .getByRole('link', { name: /Lenovo/ })
+      .first()
+      .waitFor();
+    await page.goto('/en/products?brand=Anker');
+
+    await expect(page.getByRole('link', { name: /Anker USB-C/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Lenovo IdeaPad 3/ })).toHaveCount(0);
+  });
+
+  test('the collection listing, which never had the boundary, still works', async ({ page }) => {
+    await page.goto('/en/collections/laptops');
+    await expect(page.getByRole('link', { name: /Lenovo IdeaPad 3/ })).toBeVisible();
+  });
+});
+
 test.describe('product detail', () => {
   test('shows title, brand, price, SKU and specs', async ({ page }) => {
     await page.goto('/en/products/lenovo-ideapad-3');

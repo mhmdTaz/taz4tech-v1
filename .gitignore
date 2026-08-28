@@ -10,6 +10,7 @@ next-env.d.ts
 coverage/
 playwright-report/
 lighthouse-report/
+.lighthouseci/
 test-results/
 blob-report/
 .playwright/
