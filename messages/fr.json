@@ -1,19 +1,31 @@
 {
   "home": {
-    "eyebrow": "Phase 0 · squelette",
-    "title": "Taz4Tech",
-    "tagline": "L'électronique, livrée partout au Liban. Paiement à la livraison.",
-    "storeHeading": "Configuration de la boutique",
-    "loading": "Lecture des paramètres de la boutique…",
-    "notConfigured": "Cette boutique n'a pas encore été initialisée. Lancez le script d'amorçage pour créer son document de paramètres.",
-    "lookupFailed": "Impossible de lire les paramètres de la boutique.",
-    "labels": {
-      "name": "Nom",
-      "locales": "Langues",
-      "vat": "TVA",
-      "contact": "Contact",
-      "registry": "Registre du commerce"
-    }
+    "metaTitle": "Taz4Tech — l'électronique livrée partout au Liban",
+    "metaDescription": "Ordinateurs portables, téléphones et accessoires livrés dans les huit gouvernorats. Vous payez le livreur en espèces à l'arrivée de votre commande.",
+    "heroTitle": "L'électronique, livrée partout au Liban",
+    "heroBody": "Des ordinateurs portables, des téléphones et les câbles qui vont avec. Nous appelons avant de livrer, et vous payez le livreur en espèces une fois votre commande entre vos mains.",
+    "browse": "Voir tout le catalogue",
+    "howDelivery": "Comment se passe la livraison",
+    "assurances": {
+      "cash": "Paiement à la livraison",
+      "cashBody": "Rien n'est débité en ligne. Vous payez à l'arrivée de votre commande.",
+      "reach": "Les huit gouvernorats",
+      "reachBody": "De Beyrouth à Akkar. Le prix exact de la livraison s'affiche avant la commande.",
+      "call": "Nous appelons d'abord",
+      "callBody": "Chaque commande est confirmée par téléphone avant que quoi que ce soit ne quitte la boutique."
+    },
+    "collectionsHeading": "Acheter par collection",
+    "collectionsBody": "Par où commencer, si vous ne savez pas encore ce que vous cherchez.",
+    "newHeading": "Vient d'arriver",
+    "newBody": "Les derniers ajouts au catalogue.",
+    "seeAll": "Tout voir",
+    "stepsHeading": "Comment on achète ici",
+    "step1": "Mettez ce que vous voulez dans le panier et passez commande. Rien n'est débité.",
+    "step2": "Nous appelons le numéro que vous avez donné, confirmons la commande et convenons d'un jour.",
+    "step3": "Le livreur l'apporte. Vous vérifiez, puis vous payez en espèces.",
+    "stepsLink": "Livraison et paiement en détail",
+    "emptyCatalogue": "Le catalogue est en cours de chargement. Revenez bientôt.",
+    "title": "Taz4Tech"
   },
   "products": {
     "title": "Produits",

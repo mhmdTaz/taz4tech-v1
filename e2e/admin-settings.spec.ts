@@ -148,8 +148,11 @@ test.describe('editing what customers see', () => {
       await expect(status(page)).toContainText('Saved');
       await expect(page.getByLabel('Shop name')).toHaveValue('Taz4Tech Electronics');
 
+      // The footer, not the home page: the panel that used to print the shop's
+      // configuration to customers was deleted with the Phase 0 skeleton, and
+      // the seller identity it carried lives in the footer now.
       await page.goto('/en');
-      await expect(page.locator('main')).toContainText('Taz4Tech Electronics');
+      await expect(page.getByRole('contentinfo')).toContainText('Taz4Tech Electronics');
     } finally {
       await restore(page);
     }
@@ -169,28 +172,13 @@ test.describe('editing what customers see', () => {
     }
   });
 
-  test('shows a registry number once there is one, and hides the line while there is not', async ({
-    page,
-  }) => {
-    // Law 81/2018 Art. 31 — and an empty label is not compliance, it is clutter.
-    await signIn(page);
-    try {
-      await page.goto('/en');
-      await expect(page.locator('main')).not.toContainText('Commercial registry');
-
-      await openSettings(page);
-      await page.getByLabel('Commercial registry number').fill('CR-12345');
-      await save(page);
-
-      await page.goto('/en');
-      await expect(page.locator('main')).toContainText('CR-12345');
-    } finally {
-      await restore(page);
-    }
-
-    await page.goto('/en');
-    await expect(page.locator('main')).not.toContainText('Commercial registry');
-  });
+  /*
+   * The registry number moved. It used to be asserted here, on the home page's
+   * configuration panel; that panel is gone and the seller identity it carried
+   * lives in the footer. The test moved with it, to footer-and-policies.spec.ts,
+   * rather than being duplicated — and this file now mutates the settings
+   * document in one fewer place, which is one fewer chance to race another spec.
+   */
 });
 
 test.describe('delivery, by governorate', () => {
@@ -240,6 +228,16 @@ test.describe('delivery, by governorate', () => {
       // number the checkout page guessed before it knew.
       await expect(page.locator('main')).toContainText('$8.00');
       await expect(page.locator('main')).toContainText('$27.00');
+
+      /*
+       * And the delivery page quotes the same table, checked here rather than in
+       * its own spec: two files both editing the store settings raced each other
+       * — one restored the fees while the other was still asserting on them.
+       * Settings are mutated in this file and nowhere else now.
+       */
+      await page.goto('/en/delivery');
+      await expect(page.getByRole('row').filter({ hasText: 'Akkar' })).toContainText('$8.00');
+      await expect(page.getByRole('row').filter({ hasText: 'Beirut' })).toContainText('$2.00');
     } finally {
       await restore(page);
     }

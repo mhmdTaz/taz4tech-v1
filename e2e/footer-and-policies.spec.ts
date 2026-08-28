@@ -152,29 +152,12 @@ test.describe('the written pages', () => {
 });
 
 test.describe('the delivery page', () => {
-  test('prices every governorate from the settings, not from a hand-written list', async ({
-    page,
-  }) => {
-    await signIn(page);
-    try {
-      await page.goto('/admin/settings');
-      await page.getByLabel('Akkar (USD)').fill('7.50');
-      await page.getByRole('button', { name: 'Save settings' }).click();
-      await page.waitForURL(/[?&](saved|error)=/);
-
-      await page.goto('/en/delivery');
-      const row = page.getByRole('row').filter({ hasText: 'Akkar' });
-      await expect(row).toContainText('$7.50');
-
-      // The ones nobody has priced still read as free rather than as blank.
-      await expect(page.getByRole('row').filter({ hasText: 'Beirut' })).toContainText('Free');
-    } finally {
-      await page.goto('/admin/settings');
-      await page.getByLabel('Akkar (USD)').fill('0.00');
-      await page.getByRole('button', { name: 'Save settings' }).click();
-      await page.waitForURL(/[?&](saved|error)=/);
-    }
-  });
+  /*
+   * Pricing a governorate and reading it back is asserted in
+   * admin-settings.spec.ts, which is the one file that edits store settings.
+   * Two specs mutating that document ran in parallel and raced — one restored
+   * the fees while the other was still asserting on them.
+   */
 
   test('names all eight governorates', async ({ page }) => {
     await page.goto('/en/delivery');
