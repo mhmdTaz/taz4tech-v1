@@ -178,8 +178,13 @@ jobs:
           if-no-files-found: ignore
 
   # ------------------------------------------------------------------------- 9
+  #
+  # Measured on a PHONE, not a desktop. Lighthouse's default emulation is a
+  # mid-range Android on a throttled connection, which is what most Lebanese
+  # traffic actually is; lighthouserc.json used to ask for the `desktop` preset,
+  # so the gate was green against a device almost nobody here uses.
   lighthouse:
-    name: lighthouse (>= 95)
+    name: lighthouse (mobile, >= 95)
     runs-on: ubuntu-latest
     services:
       mongodb:
