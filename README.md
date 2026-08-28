@@ -261,6 +261,53 @@ store settings are real configuration, three fake laptops are not. The fixtures
 cover the awkward shapes on purpose — an incomplete variant matrix, a live offer,
 a product with no imagery, and a draft that must stay hidden.
 
+## Measured on a phone
+
+The performance gate ran the `desktop` preset from Phase 0 to Phase 3, while
+almost every visitor to a Lebanese electronics shop is on a phone on a mobile
+network. Playwright had treated a mobile viewport as a first-class target since
+Phase 1; the thing that could actually fail a build was looking at the wrong
+device. **A gate green against a device nobody uses is a gate with no
+jurisdiction** — the same shape as a test that passes because it asserts nothing.
+
+Lighthouse's default emulation is a mid-range Android with 4× CPU throttling on
+a slow connection, so switching is a deletion: `lighthouserc.json` no longer asks
+for `desktop`, and the CI job says `lighthouse (mobile, >= 95)` so nobody has to
+open a config file to know what the number means.
+
+**It found two real defects, and neither was performance.**
+
+- **The site had no icon.** `/favicon.ico` 404ed on every page, in every locale —
+  a browser tab with no mark on it, and a console error on every load. There is
+  now an `icon.png`: the shop's accent on the shop's ground, generated rather
+  than drawn so it is reproducible.
+- **The listing skipped a heading level.** The facet panel's group headings were
+  `h3` under the page's `h1`, with no `h2` between them. Somebody navigating by
+  structure hits a missing rung on the ladder. They are `h2` now, which is what
+  they always were in the document's outline.
+
+Both had been true for three phases. The desktop preset never surfaced either.
+
+`modern-image-formats` also went from `off` to `error`. It was switched off
+because catalogue pictures were plain `<img>` tags pointed at supplier hosts and
+the audit could only ever fail; they are `next/image` on our own origin now, the
+audit passes, and an assertion that passes is worth enforcing.
+
+### Where it landed
+
+```
+                perf   a11y   best   seo
+/en               99    100    100   100
+/ar               99    100    100   100
+/en/products      98    100    100   100
+/en/products/…    99    100    100   100
+```
+
+Every category clears the ≥ 95 bar on a throttled phone. What is left below 1.00
+is Largest Contentful Paint, between 0.92 and 0.97 — which on a 4× throttled CPU
+over slow 4G is a hero image arriving in a couple of seconds, and is the honest
+number rather than one to chase.
+
 ## The product page as a shop front
 
 The page was already correct — variants, stock, offers, structured data — and it
@@ -1112,11 +1159,6 @@ conflict still throws: a dropped connection must never be reported as
 - **VAT.** 11% is configured. Whether this store must register depends on the
   LBP 5bn threshold; advisory sources claim importers must register regardless of
   turnover, but that is not primary-sourced and needs a Lebanese tax adviser.
-- **Lighthouse runs the `desktop` preset**, while most Lebanese traffic is mobile
-  — the Playwright config already treats a mobile viewport as a first-class
-  target. A performance gate measuring desktop is measuring the wrong device.
-  Switching it makes the >= 95 bar substantially harder, so it is a deliberate
-  decision rather than a quiet change — still outstanding now Phase 1 has closed.
 - **The listing is invisible without JavaScript.** The grid sits behind a
   Suspense boundary and React swaps streamed content in with an inline script, so
   a JS-disabled browser sits on the skeleton. The markup is all in the response,

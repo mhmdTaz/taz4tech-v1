@@ -41,7 +41,15 @@ export const FacetGroup = ({
 
   return (
     <section className="flex flex-col gap-3">
-      <h3 className="text-xs font-medium uppercase tracking-widest text-faint">{legend}</h3>
+      {/*
+        h2, not h3. The listing's own title is the h1 and there is nothing
+        between it and these, so an h3 skips a level — which Lighthouse's
+        heading-order audit catches and a screen-reader user navigating by
+        structure experiences as a missing rung on the ladder. The desktop
+        preset never surfaced it because it never ran this audit differently;
+        the mobile switch did.
+      */}
+      <h2 className="text-xs font-medium uppercase tracking-widest text-faint">{legend}</h2>
       <ul className="flex flex-col gap-1">
         {options.map((option) => (
           <li key={option.value}>

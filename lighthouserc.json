@@ -11,10 +11,7 @@
         "http://127.0.0.1:3000/en/products",
         "http://127.0.0.1:3000/en/products/lenovo-ideapad-3"
       ],
-      "numberOfRuns": 2,
-      "settings": {
-        "preset": "desktop"
-      }
+      "numberOfRuns": 2
     },
     "assert": {
       "assertions": {
@@ -49,7 +46,7 @@
             "maxLength": 1
           }
         ],
-        "modern-image-formats": "off"
+        "modern-image-formats": "error"
       }
     },
     "upload": {
