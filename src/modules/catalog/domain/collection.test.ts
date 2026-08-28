@@ -92,10 +92,10 @@ describe('createCollection', () => {
       const result = createCollection(
         collection({ rules: { options: [{ name: 'Colour', values: [] }] } }),
       );
-      expect(result.ok).toBe(false);
-      if (!result.ok && result.error.tag === 'option_values_empty') {
-        expect(result.error.name).toBe('Colour');
-      }
+      // Asserted whole rather than through `if (result.error.tag === ...)`,
+      // which asserts NOTHING when the tag is wrong — the guard is false and the
+      // body never runs. The name is what the admin screen puts in the message.
+      expect(result).toEqual({ ok: false, error: { tag: 'option_values_empty', name: 'Colour' } });
     });
 
     it('rejects a blank option value', () => {
@@ -125,11 +125,11 @@ describe('createCollection', () => {
       const result = createCollection(
         collection({ rules: { priceMinCents: 5000, priceMaxCents: 1000 } }),
       );
-      expect(result.ok).toBe(false);
-      if (!result.ok && result.error.tag === 'price_range_reversed') {
-        expect(result.error.minCents).toBe(5000);
-        expect(result.error.maxCents).toBe(1000);
-      }
+      // Both bounds are carried back so the admin can say which pair is wrong.
+      expect(result).toEqual({
+        ok: false,
+        error: { tag: 'price_range_reversed', minCents: 5000, maxCents: 1000 },
+      });
     });
 
     it('accepts an open-ended price rule', () => {
@@ -137,8 +137,26 @@ describe('createCollection', () => {
       expect(createCollection(collection({ rules: { priceMaxCents: 1000 } })).ok).toBe(true);
     });
 
-    it('accepts a price rule starting at zero', () => {
-      expect(createCollection(collection({ rules: { priceMinCents: 0 } })).ok).toBe(true);
+    it('accepts a price range with both bounds set', () => {
+      // Every other price test sets ONE bound, which leaves the comparison
+      // between them — the only thing `price_range_reversed` is about —
+      // unexercised by anything that is supposed to pass.
+      expect(
+        createCollection(collection({ rules: { priceMinCents: 1000, priceMaxCents: 5000 } })).ok,
+      ).toBe(true);
+    });
+
+    it('accepts a range whose bounds are equal, which selects one price', () => {
+      expect(
+        createCollection(collection({ rules: { priceMinCents: 5000, priceMaxCents: 5000 } })).ok,
+      ).toBe(true);
+    });
+
+    it.each([
+      ['priceMinCents', { priceMinCents: 0 }],
+      ['priceMaxCents', { priceMaxCents: 0 }],
+    ])('accepts a %s of exactly zero, which is free rather than negative', (_field, rules) => {
+      expect(createCollection(collection({ rules })).ok).toBe(true);
     });
   });
 
@@ -150,10 +168,10 @@ describe('createCollection', () => {
 
     it('rejects a duplicate, which would render the product twice', () => {
       const result = createCollection(collection({ pinnedProductIds: [pid(1), pid(1)] }));
-      expect(result.ok).toBe(false);
-      if (!result.ok && result.error.tag === 'pinned_duplicated') {
-        expect(result.error.productId).toBe(pid(1));
-      }
+      expect(result).toEqual({
+        ok: false,
+        error: { tag: 'pinned_duplicated', productId: pid(1) },
+      });
     });
   });
 

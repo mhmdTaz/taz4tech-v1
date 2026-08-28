@@ -94,6 +94,22 @@ describe('set_brand', () => {
     expect(changed(result).brand).toBeNull();
   });
 
+  it('reports no change when blanking a brand that is already absent', () => {
+    /*
+     * The brand is folded to null BEFORE the comparison, not after. Compare the
+     * raw "   " against a null brand and they differ, so the product is written
+     * — createProduct then normalises it back to null, and the only lasting
+     * effect is a moved updatedAt on a product nothing about which changed.
+     * That is the field the storefront sorts and caches on.
+     */
+    const result = applyBulkOperation(
+      product({ brand: null }),
+      { tag: 'set_brand', brand: '   ' },
+      NOW,
+    );
+    expect(result).toEqual({ tag: 'unchanged' });
+  });
+
   it('reports no change when trimming lands on the current value', () => {
     const result = applyBulkOperation(product(), { tag: 'set_brand', brand: ' Anker ' }, NOW);
     expect(result).toEqual({ tag: 'unchanged' });
@@ -243,6 +259,22 @@ describe('clear_offer', () => {
     });
     expect(
       changed(applyBulkOperation(live, { tag: 'clear_offer' }, NOW)).variants[0],
+    ).toMatchObject({ compareAtPrice: null, offerEndsAt: null });
+  });
+
+  it.each([
+    ['a was-price with no end date', { compareAtPrice: usd(2499) }],
+    ['an end date with nothing to discount', { offerEndsAt: LATER }],
+  ])('repairs a half-set offer: %s', (_what, half) => {
+    /*
+     * createProduct refuses both of these shapes, so a product carrying one
+     * cannot be saved by any other route — clear_offer is the repair. Deciding
+     * "did anything change?" on both fields at once instead of either would
+     * report `unchanged` and leave the product unsavable forever.
+     */
+    const broken = product({ variants: [variant({ ...half })] });
+    expect(
+      changed(applyBulkOperation(broken, { tag: 'clear_offer' }, NOW)).variants[0],
     ).toMatchObject({ compareAtPrice: null, offerEndsAt: null });
   });
 

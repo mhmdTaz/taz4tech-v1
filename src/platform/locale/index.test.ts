@@ -128,18 +128,12 @@ describe('createLocalizedText', () => {
     // Present-but-blank passes any check that only tests for presence, then
     // renders as an empty heading instead of falling back to English.
     const result = createLocalizedText({ en: 'Laptop', ar: '   ' });
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'translation_blank') {
-      expect(result.error.locale).toBe('ar');
-    }
+    expect(result).toMatchObject({ ok: false, error: { tag: 'translation_blank', locale: 'ar' } });
   });
 
   it('reports the French blank too, not only the first locale checked', () => {
     const result = createLocalizedText({ en: 'Laptop', fr: '' });
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'translation_blank') {
-      expect(result.error.locale).toBe('fr');
-    }
+    expect(result).toMatchObject({ ok: false, error: { tag: 'translation_blank', locale: 'fr' } });
   });
 
   it('omits absent locales rather than storing undefined', () => {

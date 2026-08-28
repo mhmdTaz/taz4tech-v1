@@ -268,10 +268,10 @@ describe('importProducts', () => {
     const { repo } = repository();
     const result = await importer(repo, reader(new Error('not a zip')))({ file });
 
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'file_unreadable') {
-      expect(result.error.reason).toBe('not a zip');
-    }
+    expect(result).toMatchObject({
+      ok: false,
+      error: { tag: 'file_unreadable', reason: 'not a zip' },
+    });
   });
 
   it('handles a thrown non-Error without losing the failure', async () => {
@@ -282,10 +282,10 @@ describe('importProducts', () => {
       }),
     };
     const result = await importer(repo, workbook)({ file });
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'file_unreadable') {
-      expect(result.error.reason).toBe('unknown');
-    }
+    expect(result).toMatchObject({
+      ok: false,
+      error: { tag: 'file_unreadable', reason: 'unknown' },
+    });
   });
 
   it('reports an empty sheet', async () => {

@@ -39,11 +39,10 @@ describe('saveStoreSettings', () => {
 
     const result = await save({ ...settings, storeId: 'someone-else' });
 
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'wrong_tenant') {
-      expect(result.error.expected).toBe('taz4tech');
-      expect(result.error.received).toBe('someone-else');
-    }
+    expect(result).toMatchObject({
+      ok: false,
+      error: { tag: 'wrong_tenant', expected: 'taz4tech', received: 'someone-else' },
+    });
     expect(repo.save).not.toHaveBeenCalled();
   });
 
@@ -53,10 +52,10 @@ describe('saveStoreSettings', () => {
 
     const result = await save({ ...settings, contactPhone: '70123456' });
 
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'invalid') {
-      expect(result.error.reason.tag).toBe('phone_not_e164');
-    }
+    expect(result).toMatchObject({
+      ok: false,
+      error: { tag: 'invalid', reason: { tag: 'phone_not_e164' } },
+    });
     expect(repo.save).not.toHaveBeenCalled();
   });
 

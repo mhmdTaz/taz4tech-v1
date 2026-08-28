@@ -74,6 +74,18 @@ describe('what may be stored', () => {
     expect(image({ bytes: new Uint8Array(0) })).toEqual({ ok: false, error: { tag: 'empty' } });
   });
 
+  it('caps uploads at five megabytes, written out rather than derived', () => {
+    /*
+     * Stated as a number on purpose. Every other test here expresses the limit
+     * as MAX_BYTES, so all of them keep passing if the constant is wrong — a
+     * cap of five BYTES refuses "exactly the maximum plus one" just as happily
+     * as five megabytes does, and every product photograph with it.
+     *
+     * This is the one assertion in the file that could notice.
+     */
+    expect(MAX_BYTES).toBe(5_242_880);
+  });
+
   it('accepts exactly the maximum, and refuses one byte more', () => {
     expect(image({ bytes: new Uint8Array(MAX_BYTES) }).ok).toBe(true);
 
@@ -91,7 +103,10 @@ describe('the id', () => {
     // is not derived from the bytes is an id whose bytes can change underneath a
     // year-long cache header.
     for (const id of ['', 'abc', ID.toUpperCase(), `${ID}0`, 'z'.repeat(64)]) {
-      expect(image({ id }).ok, id).toBe(false);
+      // The rejected id is carried back: this is the value that came out of a
+      // supplier sheet, and naming it is the difference between a fixable row
+      // and "an image failed".
+      expect(image({ id }), id).toEqual({ ok: false, error: { tag: 'id_invalid', id } });
     }
   });
 

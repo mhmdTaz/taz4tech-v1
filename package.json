@@ -21,6 +21,7 @@
     "test:watch": "vitest --project unit",
     "test:unit": "vitest run --project unit --coverage",
     "test:mutation": "stryker run",
+    "test:mutation:static": "node scripts/check-static-mutants.mjs",
     "test:integration": "vitest run --project integration",
     "test:e2e": "playwright test",
     "verify": "pnpm typecheck && pnpm lint && pnpm boundaries && pnpm boundaries:verify && pnpm test:unit",

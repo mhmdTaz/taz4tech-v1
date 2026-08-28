@@ -32,6 +32,30 @@ describe('normaliseSearchText', () => {
     expect(normaliseSearchText('كتـــاب')).toBe(normaliseSearchText('كتاب'));
   });
 
+  it('strips every mark in the documented range, not just the common ones', () => {
+    /*
+     * The removable set is built from a range, and a range has two ends. The
+     * marks people actually type sit near the bottom of it (fatha, kasra,
+     * shadda), so a test using only those leaves the top end unstated: the
+     * range could be built one short and every such test would still pass.
+     *
+     * U+064B..U+065F is tashkeel, U+0670 is the superscript alef, and U+0640 is
+     * the tatweel.
+     */
+    const marks = [
+      ...Array.from({ length: 0x065f - 0x064b + 1 }, (_, i) => 0x064b + i),
+      0x0670,
+      0x0640,
+    ];
+    for (const code of marks) {
+      const mark = String.fromCharCode(code);
+      expect(
+        normaliseSearchText(`كتاب${mark}`),
+        `U+${code.toString(16).toUpperCase().padStart(4, '0')} survived normalisation`,
+      ).toBe('كتاب');
+    }
+  });
+
   it('leaves latin text otherwise intact', () => {
     expect(normaliseSearchText('IdeaPad 3 15.6"')).toBe('ideapad 3 15.6"');
   });
@@ -109,9 +133,36 @@ describe('expandSearchTerms', () => {
     expect(result.terms).toEqual(['lenovo']);
   });
 
+  it('searches for the whole phrase as well as its words', () => {
+    // A single-word query cannot tell these apart: the phrase and the word are
+    // the same string. Two unknown words can — dropping either the phrase or
+    // the per-word terms leaves a search that still returns something, just not
+    // the right thing.
+    expect(expandSearchTerms('lenovo ideapad').terms).toEqual([
+      'lenovo ideapad',
+      'lenovo',
+      'ideapad',
+    ]);
+  });
+
+  it('does not expand a synonym that is merely part of a longer word', () => {
+    // "laptops" is not "laptop" here. Stemming is Mongo's job in the $text
+    // index; matching on substrings would make "case" expand inside "staircase".
+    expect(expandSearchTerms('laptops').terms).toEqual(['laptops']);
+  });
+
   it('truncates an absurdly long query rather than searching for it', () => {
     const result = expandSearchTerms('a'.repeat(500));
     expect(result.query.length).toBeLessThanOrEqual(120);
+  });
+
+  it('does not leave a half-cut word boundary behind after truncating', () => {
+    // The cut lands exactly on the space at index 119, so the truncated query
+    // ends with one. Left there it becomes a trailing empty term in the $text
+    // search — a term that matches nothing and reads as a bug in the query log.
+    const result = expandSearchTerms(`${'a'.repeat(119)} bbbb`);
+    expect(result.query).toBe('a'.repeat(119));
+    expect(result.terms).toEqual(['a'.repeat(119)]);
   });
 });
 

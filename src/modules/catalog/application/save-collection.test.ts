@@ -81,10 +81,10 @@ describe('saveCollection', () => {
     const { repo, save } = wiring();
     const result = await save(collection({ rules: {}, pinnedProductIds: [] }));
 
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'invalid') {
-      expect(result.error.reason.tag).toBe('no_membership');
-    }
+    expect(result).toMatchObject({
+      ok: false,
+      error: { tag: 'invalid', reason: { tag: 'no_membership' } },
+    });
     expect(repo.save).not.toHaveBeenCalled();
   });
 
@@ -94,10 +94,7 @@ describe('saveCollection', () => {
     });
     const result = await save(collection());
 
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'slug_taken') {
-      expect(result.error.slug).toBe('laptops');
-    }
+    expect(result).toMatchObject({ ok: false, error: { tag: 'slug_taken', slug: 'laptops' } });
     expect(repo.save).not.toHaveBeenCalled();
   });
 
@@ -114,10 +111,10 @@ describe('saveCollection', () => {
     const { repo, save } = wiring({ productExists: false });
     const result = await save(collection({ pinnedProductIds: [pid(1)] }));
 
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'pinned_product_missing') {
-      expect(result.error.productId).toBe(pid(1));
-    }
+    expect(result).toMatchObject({
+      ok: false,
+      error: { tag: 'pinned_product_missing', productId: pid(1) },
+    });
     expect(repo.save).not.toHaveBeenCalled();
   });
 

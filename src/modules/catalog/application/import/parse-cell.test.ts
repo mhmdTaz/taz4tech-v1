@@ -62,10 +62,10 @@ describe('money cells', () => {
 
   it('reports the original cell text, not the cleaned one', () => {
     const result = money('about $12');
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'unparsable_money') {
-      expect(result.error.value).toBe('about $12');
-    }
+    expect(result).toMatchObject({
+      ok: false,
+      error: { tag: 'unparsable_money', value: 'about $12' },
+    });
   });
 
   it('optionalMoney allows a blank cell', () => {
@@ -147,10 +147,7 @@ describe('status cells', () => {
 
   it('rejects a word it does not recognise instead of assuming', () => {
     const result = status('maybe');
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'unknown_status') {
-      expect(result.error.value).toBe('maybe');
-    }
+    expect(result).toMatchObject({ ok: false, error: { tag: 'unknown_status', value: 'maybe' } });
   });
 });
 

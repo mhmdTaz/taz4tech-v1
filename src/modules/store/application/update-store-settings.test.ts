@@ -110,10 +110,10 @@ describe('the phone number', () => {
     const h = harness();
     const result = await h.run(form({ contactPhone: '+44 20 7123 4567' }));
 
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'phone_invalid') {
-      expect(result.error.reason.tag).toBe('not_lebanese');
-    }
+    expect(result).toMatchObject({
+      ok: false,
+      error: { tag: 'phone_invalid', reason: { tag: 'not_lebanese' } },
+    });
   });
 });
 

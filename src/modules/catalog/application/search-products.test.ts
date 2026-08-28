@@ -121,10 +121,10 @@ describe('searchProducts', () => {
       const many = Array.from({ length: MAX_FILTER_VALUES + 1 }, (_, i) => `brand-${i}`);
       const result = await search(repo)({ brands: many });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok && result.error.tag === 'too_many_filter_values') {
-        expect(result.error.field).toBe('brands');
-      }
+      expect(result).toMatchObject({
+        ok: false,
+        error: { tag: 'too_many_filter_values', field: 'brands' },
+      });
       expect(calls).toHaveLength(0);
     });
 
@@ -132,10 +132,10 @@ describe('searchProducts', () => {
       const { repo } = repository();
       const values = Array.from({ length: MAX_FILTER_VALUES + 1 }, (_, i) => `v${i}`);
       const result = await search(repo)({ options: [{ name: 'Colour', values }] });
-      expect(result.ok).toBe(false);
-      if (!result.ok && result.error.tag === 'too_many_filter_values') {
-        expect(result.error.field).toBe('Colour');
-      }
+      expect(result).toMatchObject({
+        ok: false,
+        error: { tag: 'too_many_filter_values', field: 'Colour' },
+      });
     });
 
     it('refuses too many option axes', async () => {
@@ -145,10 +145,10 @@ describe('searchProducts', () => {
         values: ['x'],
       }));
       const result = await search(repo)({ options });
-      expect(result.ok).toBe(false);
-      if (!result.ok && result.error.tag === 'too_many_filter_values') {
-        expect(result.error.field).toBe('options');
-      }
+      expect(result).toMatchObject({
+        ok: false,
+        error: { tag: 'too_many_filter_values', field: 'options' },
+      });
     });
   });
 

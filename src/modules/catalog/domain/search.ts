@@ -117,12 +117,22 @@ const SYNONYM_INDEX: ReadonlyMap<string, readonly string[]> = (() => {
   return index;
 })();
 
-/** Longest first, so "hard drive" is matched before "hard" would be. */
+/*
+ * The synonym phrases that contain a space, in no particular order.
+ *
+ * They are matched against the whole query rather than word by word, so "hard
+ * drive" expands as storage instead of as "hard" plus "drive".
+ *
+ * Deliberately unsorted. This list used to be sorted longest-first, to match a
+ * longer phrase "before" a shorter one — which is a rule for a first-match-wins
+ * loop, and the loop below is not one: it has no break, every matching phrase
+ * expands, and the results land in a Set. Order changed nothing a caller could
+ * see, and the comment describing it made the code look like it had a
+ * precedence rule to reason about.
+ */
 const MULTI_WORD_ENTRIES: readonly (readonly [string, readonly string[]])[] = [
   ...SYNONYM_INDEX.entries(),
-]
-  .filter(([term]) => term.includes(' '))
-  .sort(([a], [b]) => b.length - a.length);
+].filter(([term]) => term.includes(' '));
 
 export type SearchTerms = {
   /** What the customer typed, normalised. Empty when they typed nothing usable. */
