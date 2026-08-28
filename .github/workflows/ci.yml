@@ -244,7 +244,7 @@ jobs:
   # its own job because it takes a few minutes, and in parallel with the e2e
   # shards so it costs no wall clock.
   mutation:
-    name: mutation (domain, >= 92)
+    name: mutation (domain, >= 94)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

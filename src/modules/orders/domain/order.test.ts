@@ -104,9 +104,29 @@ describe('createOrder', () => {
       });
     });
 
-    it('refuses an absurdly long name', () => {
+    it('refuses an absurdly long name, and says which limit', () => {
       const long = 'x'.repeat(MAX_NAME + 1);
-      expect(createOrder(order({ customer: { name: long, phone: '+9613123456' } })).ok).toBe(false);
+      expect(createOrder(order({ customer: { name: long, phone: '+9613123456' } }))).toEqual({
+        ok: false,
+        error: { tag: 'customer_name_too_long', max: MAX_NAME },
+      });
+    });
+
+    it('accepts a name of exactly the maximum', () => {
+      // The boundary itself. Mutation testing found `>` could become `>=` with
+      // nothing failing, which would have refused a name of exactly 120 —
+      // rejecting a real customer for being one character inside the limit.
+      const exact = 'x'.repeat(MAX_NAME);
+      expect(createOrder(order({ customer: { name: exact, phone: '+9613123456' } })).ok).toBe(true);
+    });
+
+    it('measures the name TRIMMED, so padding does not push it over', () => {
+      // A form that submits with trailing spaces should not refuse a name that
+      // fits. Deleting the .trim() here passed every test until this one.
+      const padded = `  ${'x'.repeat(MAX_NAME)}  `;
+      expect(createOrder(order({ customer: { name: padded, phone: '+9613123456' } })).ok).toBe(
+        true,
+      );
     });
 
     it('refuses a phone that is not already normalised', () => {
@@ -120,20 +140,42 @@ describe('createOrder', () => {
   });
 
   describe('the address', () => {
-    it('refuses an empty city', () => {
+    it('refuses an empty city, and says so', () => {
       expect(
         createOrder(
           order({ delivery: { region: 'beirut', city: ' ', street: 'Hamra', notes: null } }),
-        ).ok,
-      ).toBe(false);
+        ),
+      ).toEqual({ ok: false, error: { tag: 'city_empty' } });
     });
 
     it('refuses an empty street, which is what gets a driver to the door', () => {
       expect(
         createOrder(
           order({ delivery: { region: 'beirut', city: 'Beirut', street: '', notes: null } }),
-        ).ok,
-      ).toBe(false);
+        ),
+      ).toEqual({ ok: false, error: { tag: 'street_empty' } });
+    });
+
+    it.each([
+      ['city', MAX_CITY],
+      ['street', MAX_STREET],
+      ['notes', MAX_NOTES],
+    ])('accepts a %s of exactly the maximum, trimmed', (field, max) => {
+      /*
+       * Both boundaries at once, because mutation testing found both untested:
+       * `>` could become `>=`, and the `.trim()` could be deleted, with every
+       * test still passing. Either one refuses an address that fits — and an
+       * address refused at checkout is an order that does not happen.
+       */
+      const padded = `  ${'x'.repeat(max)}  `;
+      const delivery = {
+        region: 'beirut' as const,
+        city: field === 'city' ? padded : 'Beirut',
+        street: field === 'street' ? padded : 'Hamra',
+        notes: field === 'notes' ? padded : null,
+      };
+
+      expect(createOrder(order({ delivery })).ok, field).toBe(true);
     });
 
     it.each([
@@ -178,9 +220,25 @@ describe('createOrder', () => {
       });
     });
 
-    it.each([0, -1, 1.5])('refuses a quantity of %s', (quantity) => {
+    it('accepts exactly as many lines as a cart can hold', () => {
+      // The cart caps at thirty, so an order of thirty is a cart somebody
+      // actually filled. `>` becoming `>=` would refuse it.
+      // The fixture derives subtotal and total from the lines, so this stays a
+      // test about the cap rather than about arithmetic.
+      const many = Array.from({ length: MAX_LINES }, (_, i) => line({ sku: `S-${i}` }));
+
+      expect(createOrder(order({ lines: many })).ok).toBe(true);
+    });
+
+    it.each([0, -1, 1.5])('refuses a quantity of %s, naming the SKU', (quantity) => {
+      // The SKU is in the error because the operator has to know WHICH line to
+      // fix. Mutation testing found the whole error object could be emptied
+      // with nothing failing.
       const bad = { ...line(), quantity, lineTotal: usd(0) };
-      expect(createOrder(order({ lines: [bad] })).ok).toBe(false);
+      expect(createOrder(order({ lines: [bad] }))).toEqual({
+        ok: false,
+        error: { tag: 'quantity_invalid', sku: 'SKU-1', quantity },
+      });
     });
 
     it('refuses a negative price', () => {
@@ -211,11 +269,19 @@ describe('createOrder', () => {
 
   describe('the totals', () => {
     it('refuses a subtotal that does not match the lines', () => {
-      expect(createOrder(order({ subtotal: usd(1) })).ok).toBe(false);
+      expect(createOrder(order({ subtotal: usd(1) }))).toEqual({
+        ok: false,
+        error: { tag: 'total_wrong' },
+      });
     });
 
     it('refuses a total that is not subtotal plus delivery', () => {
-      expect(createOrder(order({ total: usd(1) })).ok).toBe(false);
+      // Named, not just refused: this is the arithmetic nobody notices until
+      // the cash is counted at the door, so the reason has to survive to the log.
+      expect(createOrder(order({ total: usd(1) }))).toEqual({
+        ok: false,
+        error: { tag: 'total_wrong' },
+      });
     });
 
     it('accepts a zero delivery fee', () => {
@@ -223,7 +289,10 @@ describe('createOrder', () => {
     });
 
     it('refuses a negative delivery fee', () => {
-      expect(createOrder(order({ deliveryFee: usd(-100) })).ok).toBe(false);
+      expect(createOrder(order({ deliveryFee: usd(-100) }))).toEqual({
+        ok: false,
+        error: { tag: 'delivery_fee_negative' },
+      });
     });
 
     it('adds delivery on top of the lines', () => {
