@@ -1536,10 +1536,13 @@ conflict still throws: a dropped connection must never be reported as
   the same wall and was decided the other way — a legal disclosure that needs
   JavaScript is not a disclosure — which is the argument for looking at the
   listing again rather than for leaving it.
-- **The eight delivery prices are all zero.** The table exists and the screen
-  edits it; nobody has priced a governorate yet. Worth setting from deliveries
-  that have actually happened rather than from a guess — until then the shop
-  delivers free, which is at least a number it can honour.
+- **Delivery is $4.00 to every governorate, and that is a starting number.** It
+  was set from `pnpm delivery:price 4.00` rather than from deliveries that have
+  actually happened, so it is the first honest guess and not a finding. Akkar and
+  Baalbek-Hermel almost certainly do not cost what Beirut costs; a month of real
+  runs will say by how much, and the eight boxes at `/admin/settings` are where
+  that goes. A flat table is also the cheapest thing for a customer to
+  understand, so there is no hurry to break it up without evidence.
 - **The e2e suite has flaked twice, and both times the evidence was gone.**
   `quick-view.spec.ts` failed once during Phase 3.1, and the checkout
   confirmation's axe check once during this pass; each passed in isolation and
