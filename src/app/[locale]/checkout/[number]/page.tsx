@@ -1,4 +1,5 @@
 import type { Order } from '@modules/orders';
+import { secretsMatch } from '@platform/auth';
 import { isLocale, type Locale } from '@platform/locale';
 import { format as formatMoney } from '@platform/money';
 import { formatForDisplay } from '@platform/phone';
@@ -10,7 +11,23 @@ import { getContainer } from '@/composition';
 
 export const dynamic = 'force-dynamic';
 
-type PageProps = { params: Promise<{ locale: string; number: string }> };
+type PageProps = {
+  params: Promise<{ locale: string; number: string }>;
+  searchParams: Promise<{ t?: string | string[] }>;
+};
+
+/**
+ * Whether this request is allowed to read this order.
+ *
+ * Constant-time, because a byte-by-byte comparison of a secret leaks how much
+ * of it a guess got right, and 130 bits guessed one character at a time is not
+ * 130 bits.
+ */
+const mayRead = async (order: Order, supplied: string | undefined): Promise<boolean> => {
+  if (order.viewToken === null) return true;
+  if (supplied === undefined) return false;
+  return secretsMatch(supplied, order.viewToken);
+};
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { locale } = await params;
@@ -31,24 +48,32 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 /**
  * The confirmation page.
  *
- * KNOWING THE NUMBER IS ALL IT TAKES TO SEE THIS
- * ----------------------------------------------
- * There are no accounts, so there is nothing to authenticate against — the
- * number in the URL is the only credential a customer has, and they need to be
- * able to reload this page, share it with the person paying, and come back to it
- * from a WhatsApp message.
+ * THE NUMBER IDENTIFIES THE ORDER; THE TOKEN AUTHORISES READING IT
+ * ----------------------------------------------------------------
+ * There are no accounts, so there is nothing to authenticate against, and the
+ * customer has to be able to reload this page, hand it to whoever is paying,
+ * and come back to it from a WhatsApp message days later. A URL is the only
+ * credential that survives all three.
  *
- * Order numbers are sequential, so a determined stranger could walk them. What
- * they would find is a name, a phone number and an address — real, and worth
- * more than a page that cannot be reloaded is worth losing. That trade is the
- * reason this page shows what was ORDERED and never offers to change it: nothing
- * here can be acted on, only read.
+ * It used to be the order number alone — and those are sequential, so anyone
+ * who could count could read a stranger's name, phone number and street
+ * address. The token in `?t=` is 130 bits from the CSPRNG, stored on the order,
+ * compared in constant time, and issued exactly once: in the redirect after
+ * checkout.
  *
- * A signed token in the URL would close it properly. That is worth doing before
- * this shop has enough orders for anyone to bother, and it is written down here
- * so the decision is visible rather than accidental.
+ * A WRONG TOKEN IS A 404, NOT A 403
+ * ---------------------------------
+ * Identical to an order that does not exist. "Forbidden" would confirm that
+ * T4T-26-000042 is real, which is the one fact enumeration is looking for, and
+ * would turn this page into an oracle for how many orders the shop has taken.
+ *
+ * ORDERS WITH NO TOKEN ARE STILL READABLE
+ * ---------------------------------------
+ * Anything placed before the field existed has `viewToken === null`. Those
+ * links are already in people's messages and cannot be reissued, so they keep
+ * working. It is a hole that stops growing rather than one that stays open.
  */
-export default async function OrderConfirmationPage({ params }: PageProps) {
+export default async function OrderConfirmationPage({ params, searchParams }: PageProps) {
   const { locale, number } = await params;
   if (!isLocale(locale)) notFound();
   setRequestLocale(locale);
@@ -57,6 +82,9 @@ export default async function OrderConfirmationPage({ params }: PageProps) {
   const container = await getContainer();
   const order = await container.orders.findByNumber(decodeURIComponent(number));
   if (order === null) notFound();
+
+  const supplied = (await searchParams).t;
+  if (!(await mayRead(order, Array.isArray(supplied) ? supplied[0] : supplied))) notFound();
 
   const t = await getTranslations({ locale, namespace: 'checkout' });
   const tRegion = await getTranslations({ locale, namespace: 'region' });

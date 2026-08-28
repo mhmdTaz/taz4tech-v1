@@ -79,7 +79,19 @@ export const placeOrder = async (formData: FormData): Promise<void> => {
       region: result.value.delivery.region,
     });
 
-    redirect(`/${locale}/checkout/${encodeURIComponent(result.value.number)}`);
+    /*
+     * The token goes in the URL, and this is the only place it is ever handed
+     * out. Order numbers are sequential, so without it the confirmation page —
+     * a name, a phone number and a street address — is readable by anyone who
+     * can count. The number says WHICH order; the token says the reader is the
+     * person who placed it.
+     *
+     * It is not logged above, deliberately: the log line already carries the
+     * order number, and a credential in a log file is a credential.
+     */
+    const token = result.value.viewToken;
+    const path = `/${locale}/checkout/${encodeURIComponent(result.value.number)}`;
+    redirect(token === null ? path : `${path}?t=${encodeURIComponent(token)}`);
   }
 
   const params = new URLSearchParams(echo(formData));

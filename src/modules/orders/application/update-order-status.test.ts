@@ -35,6 +35,7 @@ const order = (overrides: Partial<Order> = {}): Order => ({
   subtotal: usd(3998),
   deliveryFee: usd(0),
   total: usd(3998),
+  viewToken: 'TESTTOKEN0000000000000001',
   idempotencyKey: 'k',
   placedAt: NOW,
   updatedAt: NOW,

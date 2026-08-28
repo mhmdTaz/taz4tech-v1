@@ -84,6 +84,11 @@ export type PlaceOrderDeps = {
   readonly storeId: string;
   readonly now: () => Date;
   readonly nextId: () => EntityId<'Order'>;
+  /**
+   * Injected rather than called directly, like nextId, so a test can make the
+   * confirmation URL predictable without reaching for a crypto mock.
+   */
+  readonly nextViewToken: () => string;
 };
 
 /** What was taken, so it can be given back. */
@@ -235,6 +240,7 @@ const buildOrder = async (context: {
     deliveryFee,
     total: money(subtotal.cents + deliveryFee.cents),
     idempotencyKey: input.idempotencyKey.trim(),
+    viewToken: deps.nextViewToken(),
     placedAt: now,
     updatedAt: now,
   });

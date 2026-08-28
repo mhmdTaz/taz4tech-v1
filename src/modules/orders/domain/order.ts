@@ -96,6 +96,20 @@ export type Order = {
    * could be raced.
    */
   readonly idempotencyKey: string;
+  /**
+   * What makes the confirmation URL safe to hand out.
+   *
+   * The order NUMBER is sequential — T4T-26-000041 is followed by 42 — and the
+   * confirmation page shows a name, a phone number and a street address. Anyone
+   * who can count could read them. This token is what the page actually checks;
+   * the number identifies the order, the token authorises reading it.
+   *
+   * NULL for orders written before this field existed. Those stay readable
+   * without one, because their links are already in people's messages and there
+   * is no way to reissue them. It is a shrinking hole rather than a permanent
+   * one: every order placed since carries a token.
+   */
+  readonly viewToken: string | null;
   readonly placedAt: Date;
   readonly updatedAt: Date;
 };

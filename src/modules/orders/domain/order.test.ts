@@ -47,6 +47,7 @@ const order = (overrides: Partial<Order> = {}): Order => {
     customer: { name: 'Rana K', phone: '+9613123456' },
     locale: 'en',
     delivery: { region: 'beirut', city: 'Beirut', street: 'Hamra St, Bldg 4', notes: null },
+    viewToken: 'TESTTOKEN0000000000000001',
     lines,
     subtotal,
     deliveryFee,

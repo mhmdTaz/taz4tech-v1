@@ -41,6 +41,7 @@ const order = (n: number, overrides: Partial<Order> = {}): Order => ({
   subtotal: usd(3998),
   deliveryFee: usd(300),
   total: usd(4298),
+  viewToken: 'TESTTOKEN0000000000000001',
   idempotencyKey: `checkout-${n}`,
   placedAt: NOW,
   updatedAt: NOW,
@@ -105,6 +106,30 @@ describe('save and read', () => {
     await expect(
       createMongoOrderRepository(db).findByNumber('taz4tech', 'T4T-26-000009'),
     ).rejects.toThrow(/Unreadable order document/);
+  });
+
+  it('reads an order written before view tokens existed', async () => {
+    /*
+     * The confirmation page lets these through without a token, because their
+     * links are already in customers' messages and cannot be reissued. That
+     * only works if the document reads back at all — a required field added to
+     * the schema would have made every one of them unopenable instead, which is
+     * the loudest possible way to fix a privacy problem.
+     */
+    const { viewToken, ...legacy } = order(11);
+    await db.collection(ORDERS_COLLECTION).insertOne({
+      ...(legacy as unknown as Record<string, unknown>),
+      _id: legacy.id as never,
+    });
+
+    const read = await createMongoOrderRepository(db).findByNumber('taz4tech', 'T4T-26-000011');
+    expect(read?.viewToken).toBeNull();
+  });
+
+  it('round-trips a view token unchanged', async () => {
+    await createMongoOrderRepository(db).save(order(12));
+    const read = await createMongoOrderRepository(db).findByNumber('taz4tech', 'T4T-26-000012');
+    expect(read?.viewToken).toBe(order(12).viewToken);
   });
 });
 
