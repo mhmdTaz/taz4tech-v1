@@ -1,19 +1,31 @@
 {
   "home": {
-    "eyebrow": "Phase 0 · skeleton",
-    "title": "Taz4Tech",
-    "tagline": "Electronics, delivered across Lebanon. Cash on delivery.",
-    "storeHeading": "Store configuration",
-    "loading": "Reading store settings…",
-    "notConfigured": "This store has not been seeded yet. Run the seed script to create its settings document.",
-    "lookupFailed": "Store settings could not be read.",
-    "labels": {
-      "name": "Name",
-      "locales": "Locales",
-      "vat": "VAT",
-      "contact": "Contact",
-      "registry": "Commercial registry"
-    }
+    "metaTitle": "Taz4Tech — electronics delivered across Lebanon",
+    "metaDescription": "Laptops, phones and accessories delivered to all eight governorates. You pay the driver in cash when your order arrives.",
+    "heroTitle": "Electronics, delivered across Lebanon",
+    "heroBody": "Laptops, phones and the cables that go with them. We call before we deliver, and you pay the driver in cash when your order is in your hands.",
+    "browse": "Browse everything",
+    "howDelivery": "How delivery works",
+    "assurances": {
+      "cash": "Cash on delivery",
+      "cashBody": "Nothing is charged online. You pay when your order arrives.",
+      "reach": "All eight governorates",
+      "reachBody": "From Beirut to Akkar. The exact delivery cost is shown before you order.",
+      "call": "We call first",
+      "callBody": "Every order is confirmed by phone before anything leaves the shop."
+    },
+    "collectionsHeading": "Shop by collection",
+    "collectionsBody": "Where to start, if you are not sure what you are looking for.",
+    "newHeading": "Just arrived",
+    "newBody": "The most recent additions to the catalogue.",
+    "seeAll": "See everything",
+    "stepsHeading": "How buying here works",
+    "step1": "Put what you want in the basket and place the order. Nothing is charged.",
+    "step2": "We call the number you gave us, confirm the order, and agree a day.",
+    "step3": "The driver brings it. You check it, then pay in cash.",
+    "stepsLink": "Delivery and payment in full",
+    "emptyCatalogue": "The catalogue is being loaded. Please check back shortly.",
+    "title": "Taz4Tech"
   },
   "products": {
     "title": "Products",

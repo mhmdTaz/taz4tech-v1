@@ -228,8 +228,16 @@ regardless of where the server runs.
 ## The storefront
 
 ```
+/[locale]                      the home page
 /[locale]/products             listing, cursor-paginated
 /[locale]/products/[slug]      product detail
+/[locale]/collections          collections, and one collection
+/[locale]/cart                 the cart, a cookie
+/[locale]/checkout             checkout, and the confirmation
+/[locale]/delivery /returns    what it costs, and what happens if it is wrong
+/[locale]/terms /privacy       the written pages
+/[locale]/contact              one number
+/media/<sha256>                the shop's own copy of a catalogue picture
 ```
 
 **Variant selection is a URL, not client state.** Each option value is a link
@@ -252,6 +260,54 @@ Demo fixtures live in `pnpm seed:demo`, deliberately separate from `pnpm seed`:
 store settings are real configuration, three fake laptops are not. The fixtures
 cover the awkward shapes on purpose — an incomplete variant matrix, a live offer,
 a product with no imagery, and a draft that must stay hidden.
+
+## The home page
+
+It used to be the Phase 0 skeleton: an eyebrow reading `Phase 0 · skeleton`, and
+a panel printing the shop's VAT rate, its configured locales and its own phone
+number — a configuration dump on the page that decides whether a stranger trusts
+this shop with their address. That panel is gone. The seller identity it was
+accidentally carrying moved to the footer in 3.1, which is where the law expects
+it and where it appears on every page rather than one.
+
+**What a cold visitor needs, in order.** This shop has no reviews, no brand
+recognition and no card payments, and it asks somebody to let a driver come to
+their house. So the page leads with what it sells, then answers the three
+questions that decide whether the rest of the site is worth reading — *is
+anything charged now, do you reach me, will somebody call* — before it shows a
+single product. Then the collections, then the newest arrivals, then how buying
+works, with the numbered steps that end at "pay in cash".
+
+**The hero and those three answers are outside every Suspense boundary.** They
+are static per locale, so they are in the first response and survive a slow
+catalogue query or a browser with JavaScript disabled. Only the two strips that
+read the database are behind boundaries, and each fails to nothing rather than to
+an error: a home page missing a row is a home page, while a home page showing an
+error where the products should be is a shop that looks broken to somebody
+deciding whether to trust it.
+
+**Nothing here is a hand-edited feature list.** The collections strip is
+`listCollections`, so what the operator curates in the admin is what appears —
+and drafts stay out, which the demo's draft collection is there to prove. The
+arrivals strip is `listProducts`, which sorts by a ULID `_id` and is therefore
+newest-first for free, with no extra field to keep in step.
+
+There is no "on offer" strip, and that is a decision rather than an oversight:
+the catalogue has no query for it. Collection rules filter on brand, option and
+price, not on whether a variant is discounted today. Filtering one page of
+products in the page would produce a row called "our offers" that quietly is not
+all of them, which is worse than not having one.
+
+### What the tests caught
+
+Two specs were both editing the store settings document, in parallel, and raced —
+one restored the delivery fees while the other was still asserting on them.
+Settings are now mutated in `admin-settings.spec.ts` and nowhere else.
+
+And a count assertion bit for the second time. `toHaveCount(3)` on the arrivals
+strip is a claim about a catalogue that other specs publish into and archive out
+of; it is briefly wrong, exactly as the facets spec was. Naming the product that
+must be there says the same thing and stays true.
 
 ## Images the shop owns
 
