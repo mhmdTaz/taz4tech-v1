@@ -59,9 +59,18 @@ describe('addToCart', () => {
   });
 
   it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
-    'refuses a quantity of %s',
+    'refuses a quantity of %s, and says why',
     (quantity) => {
-      expect(addToCart(EMPTY_CART, 'SKU-1', quantity).ok).toBe(false);
+      /*
+       * The TAG is asserted, not just `ok: false`. Mutation testing found that
+       * every one of these passed with the error object emptied — so a caller
+       * switching on `error.tag` to choose a message would have shown the
+       * generic one with nothing failing.
+       */
+      expect(addToCart(EMPTY_CART, 'SKU-1', quantity)).toEqual({
+        ok: false,
+        error: { tag: 'quantity_out_of_range', quantity, max: MAX_QUANTITY },
+      });
     },
   );
 
@@ -129,8 +138,21 @@ describe('setQuantity', () => {
     expect(set(cart(['SKU-1', 1]), 'SKU-9', 3)).toEqual(cart(['SKU-1', 1]));
   });
 
-  it('refuses a quantity past the maximum', () => {
-    expect(setQuantity(cart(['SKU-1', 1]), 'SKU-1', MAX_QUANTITY + 1).ok).toBe(false);
+  it('hands back the very same cart, rather than a copy of it', () => {
+    // Identity, not equality. Mutation testing showed the early return could be
+    // deleted with every test still passing, because rebuilding the lines
+    // produces an equal cart — equal, but rebuilt for nothing.
+    const before = cart(['SKU-1', 1]);
+    const result = setQuantity(before, 'SKU-9', 3);
+
+    expect(result.ok && result.value).toBe(before);
+  });
+
+  it('refuses a quantity past the maximum, and says why', () => {
+    expect(setQuantity(cart(['SKU-1', 1]), 'SKU-1', MAX_QUANTITY + 1)).toEqual({
+      ok: false,
+      error: { tag: 'quantity_out_of_range', quantity: MAX_QUANTITY + 1, max: MAX_QUANTITY },
+    });
   });
 
   it('refuses a fractional quantity', () => {
@@ -142,8 +164,11 @@ describe('setQuantity', () => {
     expect(setQuantity(cart(['SKU-1', 1]), 'SKU-1', -1).ok).toBe(false);
   });
 
-  it('refuses a blank SKU', () => {
-    expect(setQuantity(cart(['SKU-1', 1]), '  ', 1).ok).toBe(false);
+  it('refuses a blank SKU, and says which problem it was', () => {
+    expect(setQuantity(cart(['SKU-1', 1]), '  ', 1)).toEqual({
+      ok: false,
+      error: { tag: 'sku_empty' },
+    });
   });
 });
 
@@ -291,8 +316,50 @@ describe('the cookie', () => {
       expect(parseCart(encode(many)).lines).toHaveLength(MAX_LINES);
     });
 
+    it('past the limit, still MERGES a duplicate of a line it already kept', () => {
+      /*
+       * The cap costs the tail, not the total: a new SKU past thirty is dropped,
+       * but a second helping of something already in the cart is not a new line
+       * and still counts. Mutation testing found this claim untested — the cap
+       * could be made to swallow duplicates too with nothing failing.
+       */
+      const many = Array.from({ length: MAX_LINES + 5 }, (_, i) => ({ s: `S-${i}`, q: 1 }));
+      const withDuplicate = [...many, { s: 'S-0', q: 4 }];
+
+      const parsed = parseCart(encode(withDuplicate));
+
+      expect(parsed.lines).toHaveLength(MAX_LINES);
+      expect(parsed.lines.find((line) => line.sku === 'S-0')?.quantity).toBe(5);
+    });
+
     it('trims a SKU on the way in', () => {
       expect(parseCart(encode([{ s: '  A  ', q: 1 }]))).toEqual(cart(['A', 1]));
+    });
+
+    it('survives content whose base64 contains + and /, which a cookie cannot', () => {
+      /*
+       * The whole reason the encoding is base64URL rather than base64: `+` and
+       * `/` are not safe in a cookie value, so they are swapped for `-` and `_`
+       * and swapped back on the way in.
+       *
+       * Mutation testing found that swap completely untested — every existing
+       * round-trip happened to produce base64 with neither character in it, so
+       * either replacement could be deleted and nothing noticed.
+       */
+      const skus = ['SKU-ÿÿ', 'SKU-þÿþ', 'جهاز'];
+      const raw = formatCart({ lines: skus.map((sku) => ({ sku, quantity: 1 })) });
+
+      // The premise: without the swap this value could not be a cookie at all.
+      expect(
+        btoa(
+          String.fromCharCode(
+            ...new TextEncoder().encode(JSON.stringify(skus.map((sku) => ({ s: sku, q: 1 })))),
+          ),
+        ),
+      ).toMatch(/[+/]/);
+
+      expect(raw).not.toMatch(/[+/=]/);
+      expect(parseCart(raw).lines.map((line) => line.sku)).toEqual(skus);
     });
   });
 });

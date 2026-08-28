@@ -283,20 +283,78 @@ the second by changing the code and failing if the suite still passes.
 pnpm test:mutation
 ```
 
-**91% of 1,322 mutants killed.** It found a real hole immediately: the E.164
+**91% of 1,322 mutants killed** when it was switched on. It found a real hole
+immediately: the E.164
 pattern validating the shop's own contact number was anchored at the end but not
 the start, so `"call me on +96170000000"` passed — and would have gone into a
 `tel:` link at the bottom of every page. Every test still passed with the `^`
 removed. That one is fixed and the store domain is now at 100%.
 
-The remaining 119 survivors are recorded below rather than chased in this
-change. Mutation testing is now a CI job with a floor of 90, so the number can
-only go up.
+The survivors were recorded rather than chased in that change; `cart.ts`, the
+worst of them, has since had a pass of its own — see above. Mutation testing is
+a CI job with a floor that gets raised as the score does, so the number can only
+go up.
 
 It runs against `vitest.mutation.config.ts` — the unit project with its wrapper
 removed, because Stryker's vitest runner takes a config file rather than a
 project name, and a run that needed a real MongoDB for each of 1,322 mutants
 would take hours.
+
+### What mutation testing found in the cart
+
+`cart.ts` was the weakest file on the domain layer at 84%, with forty-one
+mutants no test could kill. It is at **97%** now, and the interesting part is
+that only twelve of those forty-one were missing tests.
+
+**Six were error tags nobody asserted.** Every refusal was checked as
+`{ ok: false }` and never for *which* failure it was, so emptying the error
+object entirely — `{ tag: 'quantity_out_of_range', quantity, max }` to `{}` —
+broke nothing. A caller switching on `error.tag` to choose a message would have
+silently shown the wrong one.
+
+**Four were the base64url alphabet swap.** `+` and `/` are not safe in a cookie
+value, so they are swapped for `-` and `_` and swapped back on the way in. Every
+existing round-trip test happened to produce base64 containing neither
+character, so either replacement could be deleted and nothing noticed. The test
+now encodes bytes that force both, and asserts the premise as well as the
+result — that the unswapped value really would be illegal in a cookie.
+
+**One was a documented behaviour nobody checked.** Past the thirty-line cap a
+new SKU is dropped, but a second helping of something already in the cart is not
+a new line and still merges. The comment said so; nothing tested it.
+
+**One was a copy nobody could see.** Setting a quantity on a SKU that is not in
+the cart returns early. Deleting that early return still produces an *equal*
+cart, because rebuilding the lines changes nothing — equal, but rebuilt for
+nothing. The test asserts identity rather than equality.
+
+#### Sixteen were a loop that did nothing
+
+`fromBase64Url` began with a loop checking every character against the base64url
+alphabet. Sixteen separate changes to it — inverting its comparisons, emptying
+its body, deleting it outright — left every test passing, because `atob` already
+throws on anything outside the alphabet and the `catch` below already answers
+null.
+
+**Sixteen mutants nothing could kill is not a coverage gap.** It is a statement
+that the code has no observable behaviour of its own, and the honest response is
+to delete it rather than to write sixteen tests that assert nothing. That is the
+same rule this codebase already applies to unreachable branches; mutation
+testing is just the tool that found this one.
+
+#### The seven that remain are equivalent, and stay
+
+Each is a guard made redundant by a later check: an absent cookie, a `null`
+decode, an empty `catch`, `typeof entry !== 'object'`, `typeof q !== 'number'`.
+Remove any one and the value still ends up rejected a few lines further down, so
+no test can tell the difference.
+
+They are **not** deleted, and the difference from the loop above is the point.
+Dropping `if (cookie === undefined)` would make the commonest case — a visitor
+with no cart — travel through base64 decoding to reach a thrown exception, and
+would leave control flow depending on that throw. A guard that states the
+intended case plainly is worth more than a mutation score. The loop had no such
+case to state.
 
 ### An expired offer no longer freezes a product
 
@@ -1265,10 +1323,12 @@ conflict still throws: a dropped connection must never be reported as
   token in the link would fix it and would also break every confirmation already
   pasted into a WhatsApp thread. Worth deciding before the shop is busy enough for
   the numbers to be worth walking.
-- **119 mutants survive on the domain layer.** The score is 91% against a floor
-  of 90, so it cannot regress — but the weakest files are worth a pass:
-  `cart.ts` at 84%, `orders/order.ts` at 87%, `collection.ts` at 89% and
-  `media/image.ts` at 89%. Each survivor is a change to the code that no test
-  notices, which is a more useful reading list than any coverage report.
+- **79 mutants survive on the domain layer.** The score is 94% against a floor
+  of 92, so it cannot regress. `cart.ts` has had its pass and is at 97%; the
+  weakest now are `orders/order.ts` at 88%, `collection.ts` at 89% and
+  `catalog/search.ts` at 91%. Going by the cart, expect roughly a third to be
+  genuine gaps, a third to be code with no observable behaviour worth deleting,
+  and a third to be equivalent mutants that should be left alone — the reading
+  is worth as much as the score.
 
 *General information from primary sources, not legal advice.*
