@@ -31,7 +31,7 @@
 
 import { sameEverywhere } from '@platform/regions';
 import { getContainer } from '../src/composition/index.js';
-import type { StoreSettings } from '../src/modules/store/index.js';
+import { deliverySpread, type StoreSettings } from '../src/modules/store/index.js';
 import { getConfig } from '../src/platform/config/index.js';
 import { closeMongo } from '../src/platform/mongo/index.js';
 import { remoteRefusal } from './guard-remote.js';
@@ -41,6 +41,27 @@ const RESET_FLAG = '--reset';
 const rejected = (error: unknown): void => {
   console.error('Seed rejected by the domain:', JSON.stringify(error, null, 2));
   process.exitCode = 1;
+};
+
+/**
+ * Say out loud that an unpriced shop is a shop advertising free delivery.
+ *
+ * Zero is a legitimate price and the storefront renders it honestly: /delivery
+ * prints "Free" in green against all eight governorates and the checkout quotes
+ * a total with nothing added. What it cannot know is whether somebody DECIDED
+ * that or simply has not typed the numbers yet — and the default here is zero,
+ * so a fresh deploy makes a public price commitment that nobody made.
+ *
+ * Fees are never negative, so a maximum of zero means the whole table is.
+ */
+const warnIfUnpriced = (settings: StoreSettings): void => {
+  if (deliverySpread(settings).max !== 0) return;
+
+  console.warn(
+    '\nDelivery is $0.00 to every governorate.\n' +
+      'The storefront is telling customers delivery is FREE, everywhere, right now.\n' +
+      'If that is not the intention, price it at /admin/settings before anyone orders.',
+  );
 };
 
 const main = async (): Promise<void> => {
@@ -99,6 +120,7 @@ const main = async (): Promise<void> => {
     if (!result.ok) return rejected(result.error);
 
     console.warn(`Reset store "${result.value.storeId}" in database "${database}".`);
+    warnIfUnpriced(result.value);
     return;
   }
 
@@ -107,6 +129,7 @@ const main = async (): Promise<void> => {
 
   if (result.value.tag === 'created') {
     console.warn(`Created store "${result.value.settings.storeId}" in database "${database}".`);
+    warnIfUnpriced(result.value.settings);
     return;
   }
 
@@ -114,6 +137,9 @@ const main = async (): Promise<void> => {
     `Store "${result.value.settings.storeId}" already has settings in database "${database}" — left untouched.\n` +
       `Edit them at /admin/settings. To replace them from this script: pnpm seed ${RESET_FLAG}`,
   );
+  // The stored ones, not the defaults — a shop that has been live for a month
+  // and still has not priced delivery is exactly who needs telling.
+  warnIfUnpriced(result.value.settings);
 };
 
 main()
