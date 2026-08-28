@@ -7,9 +7,6 @@ import { makeSaveStoreSettings } from './save-store-settings';
 const settings: StoreSettings = {
   storeId: 'taz4tech',
   name: 'Taz4Tech',
-  defaultLocale: 'en',
-  locales: ['en', 'ar', 'fr'],
-  siteUrl: 'https://taz4tech.com',
   contactPhone: '+96170123456',
   vatBasisPoints: 1100,
   commercialRegistryNumber: null,

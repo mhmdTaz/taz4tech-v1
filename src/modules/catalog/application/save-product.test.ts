@@ -114,7 +114,13 @@ describe('saveProduct', () => {
     expect(repo.save).toHaveBeenCalledOnce();
   });
 
-  it('validates offer expiry against the injected clock', async () => {
+  it('clears an expired offer against the injected clock, and still saves', async () => {
+    /*
+     * The clock is injected so this is testable without waiting. The behaviour
+     * changed in Phase 3.6: an offer whose date has passed is cleared rather
+     * than refused, because refusing it made a product unwritable a month after
+     * its own promotion ended.
+     */
     const repo = repositoryWith();
     const past = new Date('2026-01-01T00:00:00Z');
     const result = await save(repo)(
@@ -133,9 +139,10 @@ describe('saveProduct', () => {
       }),
     );
 
-    expect(result.ok).toBe(false);
-    if (!result.ok && result.error.tag === 'invalid') {
-      expect(result.error.reason.tag).toBe('offer_end_date_in_past');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.variants[0]?.compareAtPrice).toBeNull();
+      expect(result.value.variants[0]?.offerEndsAt).toBeNull();
     }
   });
 

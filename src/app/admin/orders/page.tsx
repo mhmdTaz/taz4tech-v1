@@ -40,15 +40,19 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const status = asStatus(one(params.status));
   const cursor = one(params.cursor);
+  const phone = one(params.phone) ?? '';
 
   const container = await getContainer();
   const page = await container.orders.listOrders({
     ...(status === undefined ? {} : { status }),
     ...(cursor === undefined ? {} : { cursor }),
+    ...(phone === '' ? {} : { phone }),
   });
 
   const link = (extra: Record<string, string>) => {
-    const query = new URLSearchParams(extra);
+    // The phone search survives a status filter: an operator narrowing
+    // "this number's orders" to "pending" is one thought, not two.
+    const query = new URLSearchParams(phone === '' ? extra : { phone, ...extra });
     return `/admin/orders${query.size === 0 ? '' : `?${query.toString()}`}`;
   };
 
@@ -62,6 +66,57 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
 
         <AdminNav current="/admin/orders" importer={container.flags.isOn('excelImporter')} />
       </header>
+
+      {/*
+        A plain GET form, so it works with no JavaScript and every search is a
+        URL. The phone number IS the customer identity here, so this is a lookup
+        rather than a search: it is normalised and matched exactly, which is why
+        "03 123 456" and "+961 3 123 456" find the same orders.
+      */}
+      <form method="get" className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="phone" className="text-sm text-muted">
+            Customer phone
+          </label>
+          <input
+            id="phone"
+            name="phone"
+            type="tel"
+            inputMode="tel"
+            defaultValue={phone}
+            placeholder="03 123 456"
+            className="w-56 rounded-lg border border-hairline bg-raised px-3 py-2 text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          />
+        </div>
+
+        {/* Carried, so searching does not silently widen the status filter. */}
+        {status !== undefined && <input type="hidden" name="status" value={status} />}
+
+        <button
+          type="submit"
+          className="rounded-lg border border-hairline px-3 py-2 text-sm text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          Find orders
+        </button>
+
+        {phone !== '' && (
+          <a
+            href={`/admin/orders${status === undefined ? '' : `?status=${status}`}`}
+            className="text-sm text-muted underline-offset-4 hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            Clear
+          </a>
+        )}
+      </form>
+
+      {page.phone.tag === 'unreadable' && (
+        <p
+          role="alert"
+          className="rounded-[var(--radius-panel)] border border-caution/60 bg-surface p-4 text-sm text-caution"
+        >
+          "{page.phone.input}" is not a phone number this shop could have stored. Try 03 123 456.
+        </p>
+      )}
 
       {/*
         Links, not a form: each filter is a URL the operator can bookmark, and
@@ -97,7 +152,11 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
 
       {page.orders.length === 0 ? (
         <p className="rounded-[var(--radius-panel)] border border-hairline bg-surface p-8 text-sm text-muted">
-          {status === undefined ? 'No orders yet.' : 'No orders with that status.'}
+          {page.phone.tag === 'searched'
+            ? `No orders for ${formatForDisplay(page.phone.e164)}.`
+            : status === undefined
+              ? 'No orders yet.'
+              : 'No orders with that status.'}
         </p>
       ) : (
         <>

@@ -229,7 +229,8 @@ describe('bulkEdit', () => {
   describe('sorting products by outcome', () => {
     it('separates changed, unchanged and refused', async () => {
       const expired = product(3, {
-        variants: [variant({ sku: 'SKU-3', compareAtPrice: usd(2499), offerEndsAt: EARLIER })],
+        // A was-price equal to the price: a discount of zero, advertised as one.
+        variants: [variant({ sku: 'SKU-3', compareAtPrice: usd(1999), offerEndsAt: LATER })],
       });
 
       const { run } = editor([
@@ -270,7 +271,7 @@ describe('bulkEdit', () => {
 
     it('lets a refusal cost only its own product', async () => {
       const expired = product(2, {
-        variants: [variant({ sku: 'SKU-2', compareAtPrice: usd(2499), offerEndsAt: EARLIER })],
+        variants: [variant({ sku: 'SKU-2', compareAtPrice: usd(1999), offerEndsAt: LATER })],
       });
       const { run, saved } = editor([product(1), expired]);
 
@@ -414,15 +415,16 @@ describe('toBulkEditReport', () => {
   });
 
   it('carries refusals with the reason intact', async () => {
-    const expired = product(1, {
-      variants: [variant({ sku: 'SKU-1', compareAtPrice: usd(2499), offerEndsAt: EARLIER })],
+    // A was-price equal to the price: a discount of zero, advertised as one.
+    const zeroDiscount = product(1, {
+      variants: [variant({ sku: 'SKU-1', compareAtPrice: usd(1999), offerEndsAt: LATER })],
     });
-    const report = await reportFor([expired], [id(1)]);
+    const report = await reportFor([zeroDiscount], [id(1)]);
 
     expect(report.refusals[0]?.product.slug).toBe('product-1');
     expect(report.refusals[0]?.reason).toMatchObject({
       tag: 'invalid_result',
-      reason: { tag: 'offer_end_date_in_past' },
+      reason: { tag: 'compare_at_not_higher' },
     });
   });
 

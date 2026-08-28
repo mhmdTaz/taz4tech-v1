@@ -212,6 +212,29 @@ describe('planImport', () => {
       expect(problem?.row).toBe(2);
     });
 
+    it('reports an offer date that has already passed, and still imports the row', () => {
+      /*
+       * The domain CLEARS an expired offer rather than refusing the product, so
+       * a mistyped year — 2025 where 2026 was meant — would otherwise vanish
+       * silently as a discount that never appeared. This is the only place it
+       * can be caught with a row number attached.
+       */
+      const result = plan([['A-1', 'Anker Cable', '19.00', '', '', '', '', '25.00', '2026-01-01']]);
+
+      const problem = result.rowProblems.find((p) => p.field === 'offerEndsAt');
+      expect(problem?.problem.tag).toBe('date_already_past');
+      expect(problem?.row).toBe(2);
+
+      // Reported, not rejected: the product still arrives, without the offer.
+      expect(result.products).toHaveLength(1);
+      expect(result.products[0]?.product.variants[0]?.compareAtPrice).toBeNull();
+    });
+
+    it('says nothing about an offer date still in the future', () => {
+      const result = plan([['A-1', 'Anker Cable', '19.00', '', '', '', '', '25.00', '2026-12-31']]);
+      expect(result.rowProblems.filter((p) => p.field === 'offerEndsAt')).toEqual([]);
+    });
+
     it('rejects a duplicated SKU and points at the row that claimed it first', () => {
       const result = plan([
         ['SAME', 'Anker Cable', '19.00', '', '', '', '', '', ''],

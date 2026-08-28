@@ -19,6 +19,13 @@ export type OrderConflict =
 export type ListOrdersQuery = {
   readonly storeId: string;
   readonly status?: OrderStatus;
+  /**
+   * E.164, exact. The phone number is the customer identity in this system, so
+   * "find yesterday's order" is a lookup rather than a search — no partial
+   * matching, no regex, and nothing that could turn an operator's typo into a
+   * collection scan.
+   */
+  readonly phone?: string;
   readonly limit: number;
   readonly cursor?: string;
 };

@@ -30,6 +30,7 @@ export type {
 } from './application/place-order';
 export type {
   ListOrders,
+  PhoneSearch,
   UpdateOrderStatus,
   UpdateOrderStatusError,
 } from './application/update-order-status';

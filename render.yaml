@@ -69,7 +69,7 @@ services:
       - key: TAZ_FLAG_WHATSAPP_TAP_TO_SEND
         value: "off"
 
-    # Every PR gets a disposable copy of the app. This is the eleventh required
+    # Every PR gets a disposable copy of the app. This is the twelfth required
     # check in the quality gate — the one a human actually looks at.
     previews:
       generation: automatic

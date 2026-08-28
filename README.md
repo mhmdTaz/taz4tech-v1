@@ -133,7 +133,7 @@ MONGODB_TEST_URI=mongodb://127.0.0.1:27017 pnpm test:integration
 
 ## The quality gate
 
-Eleven checks per PR (`.github/workflows/ci.yml`). Four of them exist because a
+Twelve checks per PR (`.github/workflows/ci.yml`). Five of them exist because a
 green check is not the same as a working check:
 
 - **`pnpm boundaries:verify`** plants a deliberate violation per architecture rule
@@ -150,6 +150,13 @@ green check is not the same as a working check:
 - **The integration suite carries a negative control** that asserts an unindexed
   query *does* produce a `COLLSCAN`. Without it, a plan walker returning the
   wrong shape would make every "no COLLSCAN" assertion pass vacuously.
+- **Mutation testing runs on the domain layer** (`pnpm test:mutation`). Line
+  coverage there has been 100% since Phase 0, which answers "was this line run"
+  rather than "would anyone notice if it were wrong". Stryker answers the second
+  by changing the code and failing if the suite still passes. It found a real one
+  immediately: the E.164 pattern on the shop's own contact number was anchored
+  only at the end, so `"call me on +96170000000"` validated — and would have gone
+  into a `tel:` link on every page. Nothing else in the suite noticed.
 - **Design tokens are contrast-checked in the unit suite**
   (`src/ui/palette-contrast.test.ts`). `--color-faint` shipped at 3.18:1 and was
   only caught by axe five minutes into CI, inside a Playwright shard that first
@@ -260,6 +267,80 @@ Demo fixtures live in `pnpm seed:demo`, deliberately separate from `pnpm seed`:
 store settings are real configuration, three fake laptops are not. The fixtures
 cover the awkward shapes on purpose — an incomplete variant matrix, a live offer,
 a product with no imagery, and a draft that must stay hidden.
+
+## Mutation testing, and three decisions closed
+
+Four items had been sitting in *Open decisions*, one of them since Phase 1. They
+do not get better by ageing.
+
+### Would anyone notice if the domain were wrong?
+
+Line coverage on the domain layer has been 100% since Phase 0, and that answers
+*was this line run* — not *would anyone notice if it were wrong*. Stryker answers
+the second by changing the code and failing if the suite still passes.
+
+```bash
+pnpm test:mutation
+```
+
+**91% of 1,322 mutants killed.** It found a real hole immediately: the E.164
+pattern validating the shop's own contact number was anchored at the end but not
+the start, so `"call me on +96170000000"` passed — and would have gone into a
+`tel:` link at the bottom of every page. Every test still passed with the `^`
+removed. That one is fixed and the store domain is now at 100%.
+
+The remaining 119 survivors are recorded below rather than chased in this
+change. Mutation testing is now a CI job with a floor of 90, so the number can
+only go up.
+
+It runs against `vitest.mutation.config.ts` — the unit project with its wrapper
+removed, because Stryker's vitest runner takes a config file rather than a
+project name, and a run that needed a real MongoDB for each of 1,322 mutants
+would take hours.
+
+### An expired offer no longer freezes a product
+
+`createProduct` used to refuse any product whose `offerEndsAt` was in the past.
+That made every product **unwritable a month after its own promotion ended** — an
+operator could not archive a discontinued product, correct a price, or fix a typo
+in a title, because a stale date failed the whole write.
+
+It was never protecting anything: `isOnOffer` already answers false for an
+expired offer, so the storefront never showed it either way. **The offer is
+cleared instead of refused**, which makes the stored data agree with the page.
+
+The guard that did matter — an operator typing 2025 where they meant 2026 — moved
+to the importer, which can name the row and the cell. The row still imports; it
+imports without the offer, and the receipt says so. A silent clear would have
+been a discount that simply never appeared.
+
+### An order can be found by phone
+
+The operator's most common question is *"what did this number order?"*, and the
+answer used to be paging through a list until the name appeared.
+
+The phone number is already the customer identity, so this is a **lookup, not a
+search**: exact match on the stored E.164, no partial matching, no regex,
+nothing that could turn a typo into a collection scan. The index for it has
+existed since Phase 2.4.
+
+The operator types what the customer says — `03 123 456` — and every order was
+stored through the same normaliser, so the search goes through it too. An
+unreadable number is its own answer rather than an empty page: *"no orders for
++961 3 123 456"* and *"that is not a phone number"* are different sentences, and
+somebody is on the phone while they read one.
+
+### Three fields that governed nothing
+
+`siteUrl`, `locales` and `defaultLocale` are gone from `StoreSettings`. Nothing
+read them: canonical links come from `SITE_URL` on the deploy and routing from
+the compiled-in locale list. They were three values that looked authoritative,
+could drift from the real ones, and controlled nothing — and the settings screen
+showing the *real* values beside them was the clearest sign.
+
+They are `$unset` on the next save, like the flat `deliveryFeeCents` before them.
+A superseded field left in a document is a stale answer sitting there looking
+official to whoever opens it next.
 
 ## Measured on a phone
 
@@ -1154,8 +1235,6 @@ conflict still throws: a dropped connection must never be reported as
 
 ## Open decisions
 
-- **Stryker** mutation testing on the domain layer was a Phase 1 item and did
-  not land. Phase 1 is closed; it is either a Phase 2 task or a decision to drop.
 - **VAT.** 11% is configured. Whether this store must register depends on the
   LBP 5bn threshold; advisory sources claim importers must register regardless of
   turnover, but that is not primary-sourced and needs a Lebanese tax adviser.
@@ -1168,13 +1247,6 @@ conflict still throws: a dropped connection must never be reported as
   the same wall and was decided the other way — a legal disclosure that needs
   JavaScript is not a disclosure — which is the argument for looking at the
   listing again rather than for leaving it.
-- **Three fields on `StoreSettings` are never read.** `siteUrl`, `locales` and
-  `defaultLocale` are written by the seeder and mirrored by nothing: canonical
-  links come from `SITE_URL`, and routing is built from the compiled-in locale
-  list. The settings screen shows the real values and refuses to offer boxes for
-  them, but the stored copies are still there, still able to drift, and still
-  looking authoritative to whoever reads the document next. Either wire them up
-  or drop them.
 - **The eight delivery prices are all zero.** The table exists and the screen
   edits it; nobody has priced a governorate yet. Worth setting from deliveries
   that have actually happened rather than from a guess — until then the shop
@@ -1187,22 +1259,16 @@ conflict still throws: a dropped connection must never be reported as
   a repeat says whether the dialog opened on the wrong variant or the click lost
   the colour — two different bugs that looked identical from the old assertion.
   Watch for it; do not assume it is gone.
-- **An order is found only by browsing.** The orders list filters by status and
-  pages by cursor, but there is no search. A customer phones, says "I ordered
-  yesterday", and the operator pages until they see the name. Searching by phone
-  number is the obvious answer — the phone number is already the customer
-  identity — and it is not here because nobody has yet run a list long enough to
-  need it.
 - **The order confirmation URL is guessable.** `/checkout/T4T-26-000042` is
   sequential, and it shows a name, a phone number and an address. There are no
   accounts, so the URL is the only handle a customer has on their order; a signed
   token in the link would fix it and would also break every confirmation already
   pasted into a WhatsApp thread. Worth deciding before the shop is busy enough for
   the numbers to be worth walking.
-- **An expired offer blocks every edit to a product.** `createProduct` refuses a
-  product whose `offerEndsAt` is in the past, so an old product cannot be
-  archived until its offer is cleared. `clear offers` in the bulk editor exists
-  to unstick that, and the refusal says so — but this is friction that arrives
-  monthly as offers age.
+- **119 mutants survive on the domain layer.** The score is 91% against a floor
+  of 90, so it cannot regress — but the weakest files are worth a pass:
+  `cart.ts` at 84%, `orders/order.ts` at 87%, `collection.ts` at 89% and
+  `media/image.ts` at 89%. Each survivor is a change to the code that no test
+  notices, which is a more useful reading list than any coverage report.
 
 *General information from primary sources, not legal advice.*

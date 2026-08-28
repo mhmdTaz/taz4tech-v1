@@ -11,7 +11,6 @@
  *    let a missing field travel all the way to a rendered page as `undefined`.
  */
 
-import { LOCALES } from '@platform/locale';
 import { type ByRegion, REGIONS, type Region } from '@platform/regions';
 import type { Collection, Db } from 'mongodb';
 import { z } from 'zod';
@@ -23,9 +22,6 @@ export const STORE_SETTINGS_COLLECTION = 'storeSettings';
 const StoreSettingsDocument = z.object({
   storeId: z.string().min(1),
   name: z.string().min(1),
-  defaultLocale: z.enum(LOCALES),
-  locales: z.array(z.enum(LOCALES)).min(1),
-  siteUrl: z.string().min(1),
   contactPhone: z.string().min(1),
   vatBasisPoints: z.number().int(),
   commercialRegistryNumber: z.string().nullable(),
@@ -102,15 +98,17 @@ export const createMongoStoreSettingsRepository = (db: Db): StoreSettingsReposit
       await collection.updateOne(
         { storeId: settings.storeId },
         {
-          $set: {
-            ...settings,
-            locales: [...settings.locales],
-            deliveryFees: { ...settings.deliveryFees },
-          },
-          // The flat fee is superseded, not merely unused. Leaving it behind
-          // would be a second, stale answer to what delivery costs, sitting in
-          // the document looking authoritative.
-          $unset: { deliveryFeeCents: '' },
+          $set: { ...settings, deliveryFees: { ...settings.deliveryFees } },
+          /*
+           * Superseded fields are removed, not merely stopped being written.
+           *
+           * `deliveryFeeCents` is the flat fee the per-governorate table
+           * replaced. `siteUrl`, `locales` and `defaultLocale` were read by
+           * nothing and are gone from the type. Either left in place would be a
+           * stale value sitting in the document looking authoritative to
+           * whoever opens it next.
+           */
+          $unset: { deliveryFeeCents: '', siteUrl: '', locales: '', defaultLocale: '' },
         },
         { upsert: true },
       );

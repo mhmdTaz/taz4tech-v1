@@ -156,6 +156,7 @@ const parseRow = (
   values: readonly string[],
   mapping: ColumnMapping,
   rowNumber: number,
+  now: Date,
 ): { row: ParsedRow | null; problems: RowProblem[] } => {
   const problems: RowProblem[] = [];
   const at = (field: ImportField): string | undefined => {
@@ -174,6 +175,24 @@ const parseRow = (
   const price = record('price', cell.money(at('price')));
   const compareAtPrice = record('compareAtPrice', cell.optionalMoney(at('compareAtPrice')));
   const offerEndsAt = record('offerEndsAt', cell.optionalDate(at('offerEndsAt')));
+
+  /*
+   * A date that has already passed is reported, not refused.
+   *
+   * The domain CLEARS an expired offer rather than rejecting the product, which
+   * is what stopped a month-old promotion making a product unwritable. That
+   * makes this the only place a typo can still be caught — 2025 where 2026 was
+   * meant — because here the row number is known and the operator is looking at
+   * the sheet. The row still imports; it just imports without the offer, and
+   * says so.
+   */
+  if (offerEndsAt !== null && offerEndsAt.getTime() <= now.getTime()) {
+    problems.push({
+      row: rowNumber,
+      field: 'offerEndsAt',
+      problem: { tag: 'date_already_past', value: cell.text(at('offerEndsAt')) },
+    });
+  }
   const productStatus = record('status', cell.status(at('status')));
   const weightGrams = record('weightGrams', cell.optionalInteger(at('weightGrams')));
   const stock = record('stock', cell.optionalInteger(at('stock')));
@@ -406,7 +425,7 @@ export const planImport = (input: PlanImportInput): ImportPlan => {
     // A wholly empty row is spreadsheet punctuation, not an error.
     if (values.every((value) => cell.isBlank(value))) return;
 
-    const result = parseRow(values, input.mapping, rowNumber);
+    const result = parseRow(values, input.mapping, rowNumber, input.now);
     rowProblems.push(...result.problems);
     if (result.row === null) return;
 
