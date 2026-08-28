@@ -153,17 +153,10 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Seed the store
-        # --reset, explicitly: the plain command creates settings and then leaves
-        # them alone, which is right for a real shop and wrong for a suite that
-        # asserts on seeded values.
-        run: pnpm seed --reset
-
-      - name: Seed the demo catalogue
-        # Fixtures, never run against Atlas — the listing and product pages need
-        # something to render, including a draft that must stay hidden.
-        run: pnpm seed:demo
-
+      # No seeding step here. Playwright's globalSetup empties and reseeds before
+      # every run, so CI and a developer's machine start from the same state by
+      # the same code path — see e2e/support/reset-database.ts. Two descriptions
+      # of "a seeded store" is how they come to differ.
       - name: Playwright (all locales, axe included)
         run: pnpm exec playwright test --shard=${{ matrix.shard }}/4
 

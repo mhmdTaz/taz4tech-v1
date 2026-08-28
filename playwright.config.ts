@@ -16,9 +16,29 @@ const baseURL = `http://127.0.0.1:${PORT}`;
  */
 export const ADMIN_PASSWORD = 'e2e-admin-password';
 
+/**
+ * Where the suite's data lives.
+ *
+ * Exported because globalSetup empties and reseeds exactly the database the
+ * server is about to read. Two copies of these defaults would eventually
+ * disagree, and the failure would be a suite that reseeds one database and
+ * tests another.
+ */
+export const E2E_ENV = {
+  MONGODB_URI: process.env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017',
+  MONGODB_DB: process.env.MONGODB_DB ?? 'taz4tech_e2e',
+  STORE_ID: process.env.STORE_ID ?? 'taz4tech',
+  SITE_URL: baseURL,
+} as const;
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
+
+  // Empties and reseeds before anything runs. Locally this database is never
+  // otherwise reset, and a full one fails in ways that look like the change
+  // under test. See e2e/support/reset-database.ts.
+  globalSetup: './e2e/support/reset-database.ts',
 
   // A test that only passes on the second try is a flaky test, and a flaky suite
   // stops being read. CI retries once to absorb genuine infrastructure blips.
@@ -58,10 +78,7 @@ export default defineConfig({
     env: {
       PORT: String(PORT),
       NODE_ENV: 'production',
-      MONGODB_URI: process.env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017',
-      MONGODB_DB: process.env.MONGODB_DB ?? 'taz4tech_e2e',
-      STORE_ID: process.env.STORE_ID ?? 'taz4tech',
-      SITE_URL: baseURL,
+      ...E2E_ENV,
       // The admin area only exists when both are set, which is what the admin
       // specs need. A throwaway pair — never the values used anywhere real.
       ADMIN_PASSWORD: ADMIN_PASSWORD,

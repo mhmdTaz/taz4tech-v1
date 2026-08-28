@@ -130,22 +130,74 @@ docker run -d --rm --name taz4tech-mongo -p 27017:27017 mongo:8.0
 MONGODB_TEST_URI=mongodb://127.0.0.1:27017 pnpm test:integration
 ```
 
-### Reseed before a local e2e run
+### The e2e database resets itself
 
-CI gets a fresh MongoDB service per job and seeds it. This machine does not: the
-e2e database accumulates every order the suite has ever placed, and orders take
-stock.
+CI gets a fresh MongoDB service per job. A developer's machine does not, and
+nothing used to clear it: every order the suite had ever placed was still there,
+along with every product an import spec created and every stock row a stock spec
+wrote. After a day of runs it held **1,992 orders**, and two specs failed in
+ways that pointed nowhere near accumulated state — a `waitForURL` timeout inside
+a helper, and a settings assertion behind it. Both passed immediately on a clean
+database.
 
-After a day of runs it held **1,992 orders**, the cable was sold out, and two
-specs failed in ways that pointed nowhere near the cause — a `waitForURL`
-timeout in a helper (checkout refused, so there was no redirect to wait for) and
-a settings assertion behind it. Both passed on a fresh database. If a spec that
-places an order starts timing out for no reason, this is the first thing to
-check.
+**The mechanism was never established, and an earlier version of this section
+guessed at one.** It said the cable had sold out, which cannot happen: nothing
+ever writes a stock row for `ANK-C2C-2M`, so it is untracked and always
+purchasable. A plausible story is not a diagnosis, and putting one in a README
+is how it becomes folklore. What is known is that the database was full, and
+that emptying it fixed both failures.
 
-```bash
-MONGODB_URI=mongodb://127.0.0.1:27017 MONGODB_DB=taz4tech_e2e STORE_ID=taz4tech   SITE_URL=http://127.0.0.1:3000 pnpm seed --reset && pnpm seed:demo
-```
+Playwright's `globalSetup` now empties every collection and reseeds before any
+test runs, from the same scripts CI used to call — see
+[`e2e/support/reset-database.ts`](e2e/support/reset-database.ts). CI's own
+seeding steps are gone with it, so there is one description of a seeded store
+rather than two that can drift.
+
+**It empties collections rather than dropping the database**, which is not a
+detail. Dropping takes the indexes, and Playwright starts the web server
+*before* `globalSetup` — so the container has already run `ensureIndexes` by
+then, and would never run it again. The unique index on `idempotencyKey` is what
+makes a double-tapped checkout one order rather than two; losing it would leave
+a suite that passes with the protection gone.
+
+It refuses any database that is not local unless `TAZ_SEED_TARGET` names it, the
+same guard the seeders use, for the same reason.
+
+### The quick-view flake, finally caught
+
+The suite had flaked three times over several weeks — twice on `quick-view`,
+once on an axe check — and every time the evidence was gone before anyone
+looked, destroyed by the next `playwright test` clearing `test-results/`. The
+standing instruction was to **copy the failure directory before re-running**.
+The first run after the reseed landed went red, the directory was copied, and
+the report answered it in one line.
+
+**The click had navigated.** The report showed a product detail page, no dialog,
+and a breadcrumb — on a test that never leaves the listing.
+
+A quick-view trigger is a link with a real `href`, upgraded on hydration to open
+a dialog instead. Click it before React attaches the handler and the browser
+does what browsers do with links. **That behaviour is correct** — a customer on
+a slow connection who taps early gets the full product page rather than nothing
+— and it is the entire reason the trigger is a link and not a button.
+
+What was wrong was that nothing could tell the two states apart. The markup is
+identical before and after hydration, deliberately, so a test that clicks has no
+way to know which one it is about to get. It was a coin toss weighted heavily
+enough that it came up wrong roughly once a month.
+
+`data-ready` now appears on the dialog element once the provider's effect has
+run. Nothing renders differently; the state was always there, and now it is
+observable. Every spec that clicks a trigger waits for it first.
+
+**The mechanism is pinned by a test rather than asserted here.** One spec aborts
+every script request — JavaScript enabled, markup identical, simply never run —
+clicks a trigger, and requires a navigation and no dialog. That is the failure
+the three flakes were, reproduced deliberately and on purpose, so the next
+person to read this does not have to take the diagnosis on trust.
+
+Two of the three are now explained. The axe failure is not, and should not be
+assumed to be the same thing.
 
 ### Why `pnpm test:e2e` builds first
 
@@ -1686,20 +1738,16 @@ conflict still throws: a dropped connection must never be reported as
   runs will say by how much, and the eight boxes at `/admin/settings` are where
   that goes. A flat table is also the cheapest thing for a customer to
   understand, so there is no hurry to break it up without evidence.
-- **The e2e suite has flaked twice, and both times the evidence was gone.**
-  `quick-view.spec.ts` failed once during Phase 3.1, and the checkout
-  confirmation's axe check once during this pass; each passed in isolation and
-  on every run since, and each was unreproducible. Both times the artefacts were
-  destroyed by the next `playwright test`, which clears `test-results/` before
-  it starts — so the fix is procedural as much as technical: **copy the failure
-  directory before re-running**. Until one is caught with its report intact,
-  neither has a diagnosis, and neither should be assumed gone.
+- **One e2e flake is diagnosed; one is not.** `quick-view.spec.ts` flaked twice
+  and the checkout confirmation's axe check once. The quick-view one is
+  explained and fixed — a trigger clicked before hydration follows its href, and
+  nothing made the two states distinguishable; see *The quick-view flake,
+  finally caught* above. It was diagnosed on the first failure after the
+  standing procedure was actually followed: **copy the failure directory before
+  re-running**, because the next `playwright test` clears `test-results/`.
 
-  There is now a candidate, though it is not evidence: the local e2e database is
-  never reset, and a full one produced two unrelated-looking failures during
-  this pass. Both original flakes were on a machine that had run the suite
-  repeatedly. Worth ruling in or out the next time one appears — the procedure
-  above is what makes that possible.
+  **The axe failure remains unexplained and should not be assumed to be the same
+  cause.** It has not recurred, which is not the same as being gone.
 - **28 mutants survive on the domain layer, and every one has an argument.** The
   score is 97.79% against a floor of 97, so it cannot regress. Every module has
   had its pass; `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%. Of

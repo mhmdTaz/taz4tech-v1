@@ -10,6 +10,21 @@ import { expect, type Page, test } from '@playwright/test';
 
 const dialog = (page: Page) => page.getByRole('dialog');
 
+/**
+ * Wait until the triggers actually intercept clicks.
+ *
+ * A trigger is a link with an href, upgraded on hydration. Click it before that
+ * and the browser follows the href — which is the correct behaviour, and is why
+ * there is nothing on the page that looks different. This suite flaked three
+ * times on exactly that: the click navigated, the dialog never appeared, and the
+ * report showed a product page with no clue how it got there.
+ *
+ * `data-ready` is set by the provider in an effect, so it appears only once
+ * React has attached the handlers.
+ */
+const awaitHydration = (page: Page) =>
+  page.locator('dialog[data-ready]').waitFor({ state: 'attached' });
+
 const triggerFor = (page: Page, name: RegExp) =>
   page.locator('main ul li').filter({ hasText: name }).getByRole('link', { name: 'Quick view' });
 
@@ -24,6 +39,7 @@ const triggerFor = (page: Page, name: RegExp) =>
 const openFor = async (page: Page, name: RegExp) => {
   const term = name.source.replace(/[^\w\s-]/g, '').trim();
   await page.goto(`/en/products?q=${encodeURIComponent(term)}`);
+  await awaitHydration(page);
   await triggerFor(page, name).click();
   await expect(dialog(page)).toBeVisible();
 };
@@ -40,6 +56,28 @@ test.describe('the trigger', () => {
       'href',
       '/en/products/lenovo-ideapad-3',
     );
+  });
+
+  test('clicked before hydration, it navigates — which is the point of it', async ({ page }) => {
+    /*
+     * JavaScript is enabled here and the markup is identical; it simply never
+     * runs. This is the window the suite kept losing races in: for three
+     * separate failures over several weeks the click landed on a product page
+     * and the report showed no dialog and no reason.
+     *
+     * The behaviour is correct and worth pinning — a customer on a slow
+     * connection who taps early gets the full product page rather than nothing.
+     * What was missing was any way to tell the two states apart, which is what
+     * `data-ready` is for.
+     */
+    await page.route('**/*.js', (route) => route.abort());
+    await page.goto('/en/products');
+
+    await expect(page.locator('dialog[data-ready]')).toHaveCount(0);
+    await page.locator('main ul li').getByRole('link', { name: 'Quick view' }).first().click();
+
+    await expect(page).toHaveURL(/\/en\/products\/[a-z0-9-]+$/);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
   test('announces that it opens a dialog', async ({ page }) => {
@@ -263,6 +301,7 @@ test.describe('a product with no options', () => {
 test.describe('other locales', () => {
   test('opens in Arabic with translated text and RTL layout', async ({ page }) => {
     await page.goto('/ar/products');
+    await awaitHydration(page);
     // Not filtered by product name: the Arabic title is a translation, so
     // matching on the English one would pass or fail for the wrong reason.
     await page.locator('main ul li').getByRole('link', { name: 'عرض سريع' }).first().click();
@@ -278,6 +317,7 @@ test.describe('other locales', () => {
 
   test('links to the product page in the same locale', async ({ page }) => {
     await page.goto('/fr/products');
+    await awaitHydration(page);
     await page.locator('main ul li').getByRole('link', { name: 'Aperçu rapide' }).first().click();
 
     await expect(
@@ -291,6 +331,7 @@ test.describe('inside a collection', () => {
     // The collection page renders the same grid, so the dialog comes with it —
     // which is the payoff for modelling a collection as a saved query.
     await page.goto('/en/collections/laptops');
+    await awaitHydration(page);
     await page.locator('main ul li').getByRole('link', { name: 'Quick view' }).first().click();
     await expect(dialog(page)).toBeVisible();
   });
@@ -300,6 +341,7 @@ test.describe('accessibility', () => {
   for (const locale of ['en', 'ar'] as const) {
     test(`the open dialog has no WCAG 2.1 AA violations in ${locale}`, async ({ page }) => {
       await page.goto(`/${locale}/products`);
+      await awaitHydration(page);
       await page
         .locator('main ul li')
         .getByRole('link', { name: /Quick view|عرض سريع/ })
