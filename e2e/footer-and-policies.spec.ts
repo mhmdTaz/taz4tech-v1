@@ -132,6 +132,43 @@ test.describe('the written pages', () => {
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Retours');
   });
 
+  test('say that the shop promises are a floor, not a ceiling, in every locale', async ({
+    page,
+  }) => {
+    /*
+     * Both pages read as a list of what the shop will and will not do, and the
+     * returns page has a section headed with what it cannot take back. Without
+     * this, a customer could reasonably finish either page believing that list
+     * is the whole of what they are entitled to.
+     *
+     * Asserted in all three because a sentence about rights that exists only in
+     * English is a sentence most of this shop's customers do not have.
+     */
+    const expected = [
+      { locale: 'en', terms: /law/i, returns: /legal rights/i },
+      { locale: 'ar', terms: /القانون/, returns: /حقوقك/ },
+      { locale: 'fr', terms: /loi/i, returns: /droits légaux/i },
+    ];
+
+    for (const { locale, terms, returns } of expected) {
+      await page.goto(`/${locale}/terms`);
+      await expect(page.getByRole('main')).toContainText(terms);
+
+      await page.goto(`/${locale}/returns`);
+      await expect(page.getByRole('main')).toContainText(returns);
+    }
+  });
+
+  test('do not claim anything is sent to the customer after they order', async ({ page }) => {
+    // Nothing is: no email, no SMS, nothing in the codebase that sends. The
+    // returns page used to tell customers to find their order number on "the
+    // confirmation page we sent you", which is a phone call to the shop from
+    // somebody looking through an inbox for it.
+    await page.goto('/en/returns');
+    await expect(page.getByRole('main')).not.toContainText(/we sent you/i);
+    await expect(page.getByRole('main')).toContainText(/write it down/i);
+  });
+
   test('declare a canonical and are open to indexing', async ({ page }) => {
     // Unlike checkout, these are pages the shop WANTS found: "does this shop
     // deliver to Akkar" is a search somebody makes.

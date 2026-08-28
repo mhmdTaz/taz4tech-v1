@@ -204,9 +204,10 @@
     "afterHeading": "Après la livraison",
     "afterBody": "Appelez-nous dans les sept jours et nous organisons un remplacement ou vous rendons ce que vous avez payé. Conservez le carton et tout ce qu'il contenait.",
     "notHeading": "Ce que nous ne pouvons pas reprendre",
-    "notBody": "Tout article abîmé après la livraison, et tout article rendu sans les câbles, chargeurs ou accessoires livrés avec lui.",
+    "notBody": "Tout article que vous avez abîmé après la livraison, et tout article rendu sans les câbles, chargeurs ou accessoires livrés avec lui. Une panne qui survient d'elle-même n'est pas un dommage — dites-le-nous et nous l'examinerons.",
+    "rightsNote": "Ce sont nos propres engagements. Ils ne limitent pas vos droits légaux.",
     "howHeading": "Comment lancer un retour",
-    "howBody": "Appelez-nous avec votre numéro de commande. Il ressemble à T4T-26-000042 et figure sur la page de confirmation que nous vous avons envoyée.",
+    "howBody": "Appelez-nous avec votre numéro de commande. Il ressemble à T4T-26-000042 et s'affiche sur la page de confirmation juste après la commande — notez-le, car rien ne vous est envoyé ensuite. Si vous ne l'avez pas, le numéro de téléphone utilisé pour commander suffit à retrouver votre commande.",
     "contactLink": "Comment nous joindre"
   },
   "terms": {
@@ -214,7 +215,7 @@
     "title": "Conditions de vente",
     "intro": "Comment fonctionne un achat dans cette boutique, en termes simples.",
     "whoHeading": "À qui vous achetez",
-    "whoBody": "Taz4Tech, une boutique d'électronique qui vend à des clients au Liban. Notre nom, notre immatriculation et notre numéro de téléphone figurent au bas de chaque page.",
+    "whoBody": "Taz4Tech, une boutique d'électronique qui vend à des clients au Liban. Notre nom et notre numéro de téléphone figurent au bas de chaque page, et notre numéro d'immatriculation commerciale y apparaît dès que l'entreprise est immatriculée.",
     "pricesHeading": "Les prix",
     "pricesBody": "Les prix sont en dollars américains et incluent la TVA lorsqu'elle s'applique. Le prix affiché au moment de la commande est celui avec lequel votre commande est enregistrée — si un prix change ensuite, cela ne modifie pas une commande déjà passée.",
     "orderHeading": "Passer commande",
@@ -223,6 +224,8 @@
     "paymentBody": "Paiement en espèces à la livraison uniquement, remis au livreur en dollars américains. Nous n'acceptons pas les cartes, et personne de cette boutique ne vous demandera jamais vos coordonnées bancaires.",
     "cancelHeading": "Annuler",
     "cancelBody": "Appelez-nous avant le départ du livreur et nous annulons la commande sans aucun frais pour vous.",
+    "rightsHeading": "Vos droits légaux",
+    "rightsBody": "Tout ce qui figure sur cette page et sur la page des retours correspond aux engagements de cette boutique. Rien n'y réduit les droits que vous accorde la loi libanaise sur la protection du consommateur, et en cas de divergence, c'est la loi qui prévaut.",
     "changesHeading": "Modification de ces conditions",
     "changesBody": "Si ces conditions changent, la version affichée sur cette page est celle qui s'applique aux commandes passées après sa mise en ligne. Une commande déjà passée conserve les conditions en vigueur ce jour-là."
   },

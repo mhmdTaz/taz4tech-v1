@@ -111,7 +111,8 @@ through `parseFloat`, which would turn `"1.115"` into 111 cents instead of 112.
 | `pnpm test` | Unit tests |
 | `pnpm test:unit` | Unit tests with per-directory coverage gates |
 | `pnpm test:integration` | Against a real MongoDB (see below) |
-| `pnpm test:e2e` | Playwright, all locales, axe included |
+| `pnpm test:e2e` | Builds, then Playwright, all locales, axe included |
+| `pnpm delivery:price <amount>` | Sets one delivery price for all eight governorates. Local databases only unless `TAZ_SEED_TARGET` names the database |
 | `pnpm bundle:budget` | Fails if client JS crosses its ceiling |
 | `pnpm build:offline` | `pnpm build` with no database reachable, the way CI builds it |
 | `pnpm seed` | Creates the store settings document if there is none, and otherwise leaves it alone |
@@ -128,6 +129,19 @@ fake reproduces.
 docker run -d --rm --name taz4tech-mongo -p 27017:27017 mongo:8.0
 MONGODB_TEST_URI=mongodb://127.0.0.1:27017 pnpm test:integration
 ```
+
+### Why `pnpm test:e2e` builds first
+
+Playwright's `webServer` runs `pnpm start`, which serves whatever is already in
+`.next` and never builds. CI is fine — the e2e job has its own build step — but
+running `playwright test` directly on this machine tests **the last build, not
+the working tree**.
+
+It is a quiet failure in both directions. It cost a confusing red here (a copy
+change that was in the source and not in the server), and it can just as easily
+go green against code that no longer exists. `pnpm test:e2e` builds first for
+that reason; `pnpm exec playwright test` skips it, which is the right thing when
+you are iterating on a spec and have not touched the app.
 
 ---
 
@@ -897,10 +911,48 @@ analytics in this codebase, so there is nothing to consent to).
 
 Three things in it are **business promises rather than facts about the system** —
 the seven-day return window, what cannot be taken back, and inspecting the box
-with the driver before paying. They are drafted, not authoritative. The
-statutory part — what a Lebanese distance seller owes a consumer regardless of
-what these pages say — is not written here and needs the same treatment the VAT
-question already gets: a professional, not a guess.
+with the driver before paying. They are drafted, not authoritative.
+
+#### Two of them were not true
+
+Checking the copy against the code found two sentences that described a shop
+this is not.
+
+**"the confirmation page we sent you."** Nothing is sent. There is no email in
+this codebase, no SMS, no library that could send either — the order number
+appears on the confirmation page once, which is why that page says *keep this
+number*. The returns page then told customers to look for it in something they
+never received, which is a phone call to the shop from somebody searching an
+inbox. It now says the number is shown right after ordering and worth writing
+down, and that **the phone number they ordered with is enough** if they did not
+— which is true because the admin gained a lookup by phone in Phase 3.6.
+
+**"Our name, registration and phone number are at the bottom of every page."**
+The registration is not there: `commercialRegistryNumber` is null until the
+business is registered, and the footer hides the line rather than printing an
+empty label. A legal page is the worst place to assert a disclosure that is not
+being made. It now names what is always there and says the registration number
+appears once it is issued — wording that is true in both states, which matters
+because the alternative was making a statically generated legal page read the
+database to decide one clause.
+
+#### And the statutory part is still not written
+
+What a Lebanese distance seller owes a consumer regardless of what these pages
+say is not here, and needs the same treatment the VAT question gets: a
+professional, not a guess.
+
+What the pages now do say is that **the promises are a floor**. Terms carries a
+*Your legal rights* section and returns carries the same sentence in the section
+headed with what cannot be taken back — the one a customer reads as a list of
+what they are not entitled to. Neither states what the law grants, because that
+is the part that needs a lawyer; both state that where the shop's promises and
+the law differ, the law is what counts. That is safe to say without advice, and
+leaving it unsaid was the more dangerous half.
+
+The e2e suite asserts it in all three locales, because a sentence about rights
+that exists only in English is a sentence most of this shop's customers do not
+have.
 
 ### A language switcher, finally
 

@@ -23,7 +23,7 @@
     "test:mutation": "stryker run",
     "test:mutation:static": "node scripts/check-static-mutants.mjs",
     "test:integration": "vitest run --project integration",
-    "test:e2e": "playwright test",
+    "test:e2e": "pnpm build && playwright test",
     "verify": "pnpm typecheck && pnpm lint && pnpm boundaries && pnpm boundaries:verify && pnpm test:unit",
     "seed": "tsx scripts/seed.ts",
     "test:e2e:ui": "playwright test --ui",
