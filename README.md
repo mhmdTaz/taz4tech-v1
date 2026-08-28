@@ -356,6 +356,30 @@ would leave control flow depending on that throw. A guard that states the
 intended case plainly is worth more than a mutation score. The loop had no such
 case to state.
 
+### And what it found in the order
+
+`orders/order.ts` was the next weakest at 87%, and it is at **99%** now. The
+distribution was nothing like the cart's: twenty-one of its twenty-three
+survivors were plain missing tests, with no dead code among them.
+
+**Ten were error tags nobody asserted** — the same shape as the cart. Every
+refusal checked `{ ok: false }` and never which failure it was, including
+`total_wrong`, which is the arithmetic nobody notices until the cash is counted
+at the door.
+
+**Eleven were boundaries.** `>` could become `>=` on the name, city, street,
+notes and line-count limits, and the `.trim()` could be deleted from four of
+them, with every test still passing. Both refuse an order that fits: a name of
+exactly 120 characters, or an address submitted with trailing spaces. **An order
+refused at checkout is an order that does not happen**, which makes these the
+most expensive mutants found so far — and they survived behind tests that only
+ever tried a value far past the limit.
+
+The two that remain replace `delivered: []` with `["Stryker was here"]` in the
+transition table. Nothing can kill them: the value is not an `OrderStatus`, so
+no `canTransition` call with a real status can tell the difference. A mutation
+the type system forbids is not a gap in the tests.
+
 ### An expired offer no longer freezes a product
 
 `createProduct` used to refuse any product whose `offerEndsAt` was in the past.
@@ -1309,26 +1333,30 @@ conflict still throws: a dropped connection must never be reported as
   edits it; nobody has priced a governorate yet. Worth setting from deliveries
   that have actually happened rather than from a guess — until then the shop
   delivers free, which is at least a number it can honour.
-- **One e2e test flaked once, and the evidence is gone.** `quick-view.spec.ts`'s
-  "starts from the current selection" failed in one full run out of four while
-  the footer was being added, and passed 27/27 in isolation and on every run
-  since. The artefacts from that run were deleted before it could be read, which
-  was careless. The test now asserts its starting state as well as its result, so
-  a repeat says whether the dialog opened on the wrong variant or the click lost
-  the colour — two different bugs that looked identical from the old assertion.
-  Watch for it; do not assume it is gone.
+- **The e2e suite has flaked twice, and both times the evidence was gone.**
+  `quick-view.spec.ts` failed once during Phase 3.1, and the checkout
+  confirmation's axe check once during this pass; each passed in isolation and
+  on every run since, and each was unreproducible. Both times the artefacts were
+  destroyed by the next `playwright test`, which clears `test-results/` before
+  it starts — so the fix is procedural as much as technical: **copy the failure
+  directory before re-running**. Until one is caught with its report intact,
+  neither has a diagnosis, and neither should be assumed gone.
 - **The order confirmation URL is guessable.** `/checkout/T4T-26-000042` is
   sequential, and it shows a name, a phone number and an address. There are no
   accounts, so the URL is the only handle a customer has on their order; a signed
   token in the link would fix it and would also break every confirmation already
   pasted into a WhatsApp thread. Worth deciding before the shop is busy enough for
   the numbers to be worth walking.
-- **79 mutants survive on the domain layer.** The score is 94% against a floor
-  of 92, so it cannot regress. `cart.ts` has had its pass and is at 97%; the
-  weakest now are `orders/order.ts` at 88%, `collection.ts` at 89% and
-  `catalog/search.ts` at 91%. Going by the cart, expect roughly a third to be
-  genuine gaps, a third to be code with no observable behaviour worth deleting,
-  and a third to be equivalent mutants that should be left alone — the reading
-  is worth as much as the score.
+- **64 mutants survive on the domain layer.** The score is 95% against a floor
+  of 94, so it cannot regress. `cart.ts` and `orders/order.ts` have had their
+  passes, at 97% and 99%; what is left is `catalog` at 93% — fifty of the
+  sixty-four, spread across `collection.ts`, `search.ts` and `product.ts` — and
+  `media/image.ts` at 89%.
+
+  The two files done so far split very differently: the cart was a third real
+  gaps, a third code with no observable behaviour worth deleting, and a third
+  equivalent mutants; the order was almost entirely real gaps. There is no rule
+  to apply in advance, which is the argument for reading the survivors rather
+  than reporting the number.
 
 *General information from primary sources, not legal advice.*

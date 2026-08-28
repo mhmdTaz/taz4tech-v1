@@ -13,9 +13,9 @@
   "coverageAnalysis": "perTest",
   "mutate": ["src/modules/*/domain/**/*.ts", "!src/modules/*/domain/**/*.test.ts"],
   "thresholds": {
-    "high": 95,
-    "low": 92,
-    "break": 92
+    "high": 97,
+    "low": 94,
+    "break": 94
   },
   "timeoutMS": 20000,
   "concurrency": 4,
