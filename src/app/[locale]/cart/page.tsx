@@ -2,6 +2,7 @@ import { MAX_QUANTITY, type PricedCart } from '@modules/cart';
 import { isLocale, type Locale } from '@platform/locale';
 import { format as formatMoney } from '@platform/money';
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
@@ -87,20 +88,21 @@ export default async function CartPage({ params }: { params: Promise<{ locale: s
                 key={line.sku}
                 className="flex flex-col gap-4 rounded-[var(--radius-panel)] border border-hairline bg-surface p-4 sm:flex-row sm:items-start"
               >
-                <div className="aspect-4/3 w-full shrink-0 overflow-hidden rounded-lg border border-hairline bg-raised sm:w-32">
+                <div className="relative aspect-4/3 w-full shrink-0 overflow-hidden rounded-lg border border-hairline bg-raised sm:w-32">
                   {line.imageUrl === null ? (
                     <div
                       aria-hidden="true"
                       className="h-full w-full bg-linear-to-br from-raised to-surface"
                     />
                   ) : (
-                    // biome-ignore lint/performance/noImgElement: media hosts are a Phase 3 settings decision
-                    <img
+                    // A fixed-size thumbnail, so `sizes` can name the one size
+                    // it is ever rendered at rather than guess from the viewport.
+                    <Image
                       src={line.imageUrl}
                       alt={line.imageAlt}
-                      loading="lazy"
-                      decoding="async"
-                      className="h-full w-full object-cover"
+                      fill
+                      sizes="96px"
+                      className="object-cover"
                     />
                   )}
                 </div>

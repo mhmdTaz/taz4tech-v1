@@ -33,9 +33,24 @@ const NEXT_DIR = '.next';
  * Measured at Phase 0: baseline 127.1 KB, total 179.7 KB.
  * Headroom is deliberate but small. These numbers should come DOWN as the app is
  * optimised — raising one is a decision to review, not a chore to unblock CI.
+ *
+ * RAISED ONCE, IN PHASE 3.2, FROM 200 TO 215
+ * ------------------------------------------
+ * `next/image` costs about 11 KB of client runtime, loaded once and shared
+ * across the site. It was unusable until catalogue pictures were served from our
+ * own origin, and turning it on is what buys responsive srcsets, WebP, lazy
+ * loading below the fold and a reserved box that does not shift the layout.
+ *
+ * The trade is not close. A supplier photograph is 200-800 KB; served at tile
+ * size as WebP it is a few tens of KB, on every product page, for every visitor,
+ * most of them on a phone on a mobile network. Eleven kilobytes of cached
+ * JavaScript against hundreds of kilobytes of image on first paint.
+ *
+ * This is the reasoning the budget exists to force. It is not a licence for the
+ * next raise.
  */
 const BASELINE_BUDGET_KB = 145;
-const TOTAL_BUDGET_KB = 200;
+const TOTAL_BUDGET_KB = 215;
 
 /*
  * Every file access below reads first and handles the failure, rather than

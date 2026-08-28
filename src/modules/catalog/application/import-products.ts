@@ -12,6 +12,7 @@
 import type { EntityId } from '@platform/ids';
 import { err, ok, type Result } from '@platform/result';
 import type {
+  ImageIngestor,
   ProductRepository,
   SaveConflict,
   StockWriteFailure,
@@ -21,6 +22,7 @@ import type {
 import type { Product } from '../domain/product';
 import { type ColumnMapping, detectMapping } from './import/column-mapping';
 import { type ImportPlan, planImport } from './import/plan-import';
+import { type ImageFailure, takeImages } from './import/take-images';
 
 export type ImportProductsError =
   | { readonly tag: 'file_unreadable'; readonly reason: string }
@@ -63,6 +65,15 @@ export type ImportProductsOutput = {
   readonly stockFailures: readonly StockWriteFailure[];
   /** SKUs whose stock this import set. Zero when the sheet had no stock column. */
   readonly stockWritten: number;
+  /**
+   * Images the shop could not take a copy of.
+   *
+   * The product still imported, without that picture. Reported by slug and URL
+   * because the operator fixes a spreadsheet by row, not by hash.
+   */
+  readonly imageFailures: readonly ImageFailure[];
+  /** Distinct supplier images fetched and stored. Zero on a dry run, always. */
+  readonly imagesTaken: number;
   readonly committed: boolean;
 };
 
@@ -74,8 +85,9 @@ export const makeImportProducts =
   (deps: {
     repository: ProductRepository;
     reader: WorkbookReader;
-    /** Injected, not imported: see the note on the port in ../contracts. */
+    /** Injected, not imported: see the note on the ports in ../contracts. */
     stock: StockWriter;
+    images: ImageIngestor;
     storeId: string;
     now: () => Date;
     nextId: () => EntityId<'Product'>;
@@ -176,6 +188,18 @@ export const makeImportProducts =
         failures: [],
         stockFailures: [],
         stockWritten: 0,
+        /*
+         * A dry run fetches NOTHING.
+         *
+         * A preview that pulled four hundred images off a supplier's CDN every
+         * time an operator adjusted a column mapping would be a preview with a
+         * cost, and previews are supposed to be free. It also means the plan
+         * shown on screen still carries supplier URLs while the committed
+         * products carry ours, which is the honest thing to show: nothing has
+         * been taken yet.
+         */
+        imageFailures: [],
+        imagesTaken: 0,
         committed: false,
       });
     }
@@ -186,12 +210,23 @@ export const makeImportProducts =
      * the operator fixes three rows and re-imports, rather than hunting for the
      * one cell that blocked everything.
      */
+    /*
+     * Copies of the images are taken BEFORE anything is written.
+     *
+     * The plan is pure and produces products still pointing at whatever the
+     * spreadsheet said; this is where the catalogue stops depending on somebody
+     * else's server. Doing it first means a product is never written with a
+     * supplier URL that a later step would have to go back and correct.
+     */
+    const taken = await takeImages(plan.products, deps.images);
+
     let written = 0;
     const failures: { slug: string; conflict: SaveConflict }[] = [];
     const levels: { sku: string; onHand: number }[] = [];
 
-    for (const planned of plan.products) {
-      const saved = await deps.repository.save(planned.product);
+    for (const planned of taken.products) {
+      const product = planned.product;
+      const saved = await deps.repository.save(product);
       if (saved.ok) {
         written++;
         // Stock is collected rather than written per product, so the whole
@@ -209,7 +244,7 @@ export const makeImportProducts =
        * throws out of the repository, because a dropped connection must not be
        * reported as "397 of 400 imported".
        */
-      failures.push({ slug: planned.product.slug, conflict: saved.error });
+      failures.push({ slug: product.slug, conflict: saved.error });
     }
 
     /*
@@ -227,6 +262,8 @@ export const makeImportProducts =
       mapping,
       plan,
       written,
+      imageFailures: taken.failures,
+      imagesTaken: taken.taken,
       failures,
       stockFailures,
       stockWritten: levels.length - stockFailures.length,

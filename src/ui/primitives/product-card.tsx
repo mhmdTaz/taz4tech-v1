@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import type { ReactNode } from 'react';
 
 /**
@@ -44,15 +45,23 @@ export const ProductCard = ({
     >
       <div className="relative aspect-4/3 overflow-hidden bg-raised">
         {image ? (
-          // next/image needs remote patterns configured per host, and which hosts
-          // serve catalogue media is a Phase 3 settings decision. Plain img until then.
-          // biome-ignore lint/performance/noImgElement: media hosts are a Phase 3 settings decision
-          <img
+          /*
+           * next/image, now that every catalogue picture is served from our own
+           * origin. `fill` because the frame decides the size, not the file:
+           * supplier photographs arrive at every aspect ratio and the tile is
+           * always 4:3.
+           *
+           * `sizes` is not optional here. Without it the browser assumes the
+           * image is the full viewport width and fetches the largest candidate
+           * for a tile three to a row — which is most of the payload on the
+           * page that matters most.
+           */
+          <Image
             src={image.src}
             alt={image.alt}
-            loading="lazy"
-            decoding="async"
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            fill
+            sizes="(min-width: 1280px) 25vw, (min-width: 640px) 50vw, 100vw"
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
           // An empty frame rather than a broken-image icon or a stretched

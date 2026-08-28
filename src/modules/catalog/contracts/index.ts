@@ -175,6 +175,21 @@ export interface StockWriter {
   ): Promise<readonly StockWriteFailure[]>;
 }
 
+/**
+ * Taking a copy of a supplier's image.
+ *
+ * The importer reads image URLs out of a spreadsheet; somewhere else knows how
+ * to fetch one, check it and store it. Neither module imports the other — the
+ * adapter is written in the composition root, like the stock writer above it.
+ *
+ * `reason` is a sentence for an import receipt, not a tag: the catalogue has no
+ * business knowing the ways an image can be refused, only that one was and what
+ * to tell the operator.
+ */
+export interface ImageIngestor {
+  take(url: string): Promise<{ ok: true; path: string } | { ok: false; reason: string }>;
+}
+
 /** A unique index refused the write. Which one is what the caller has to report. */
 export type SaveConflict =
   | { readonly tag: 'sku_taken'; readonly sku: string }

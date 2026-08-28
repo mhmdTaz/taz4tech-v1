@@ -73,6 +73,8 @@ const report = (rows: string[][], existing: Product[] = []) => {
     failures: [],
     stockFailures: [],
     stockWritten: 0,
+    imageFailures: [],
+    imagesTaken: 0,
   });
 };
 
@@ -234,6 +236,8 @@ describe('toImportReport', () => {
       failures: [],
       stockFailures: [],
       stockWritten: 0,
+      imageFailures: [],
+      imagesTaken: 0,
     });
 
     expect(result.mappingProblems.map((problem) => problem.field)).toEqual([
@@ -282,6 +286,8 @@ describe('toImportReport', () => {
         failures: [],
         stockFailures: [],
         stockWritten: 0,
+        imageFailures: [],
+        imagesTaken: 0,
       });
 
       expect(result.committed).toBe(true);
@@ -318,6 +324,8 @@ describe('toImportReport', () => {
         failures: [],
         stockFailures: [],
         stockWritten: 0,
+        imageFailures: [],
+        imagesTaken: 0,
       };
 
       return toImportReport(Object.assign(base, overrides));
@@ -346,6 +354,8 @@ describe('toImportReport', () => {
         failures: [],
         stockFailures: [],
         stockWritten: 0,
+        imageFailures: [],
+        imagesTaken: 0,
       });
 
       expect(result.skuConflicts).toEqual([

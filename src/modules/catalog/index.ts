@@ -24,7 +24,7 @@ import { type ListProducts, makeListProducts } from './application/list-products
 import { makeSaveCollection, type SaveCollection } from './application/save-collection';
 import { makeSaveProduct, type SaveProduct } from './application/save-product';
 import { makeSearchProducts, type SearchProducts } from './application/search-products';
-import type { StockWriter } from './contracts';
+import type { ImageIngestor, StockWriter } from './contracts';
 import {
   createMongoCollectionRepository,
   ensureCollectionIndexes,
@@ -213,6 +213,13 @@ export const createCatalogModule = (deps: {
    * composition root is the only place that knows both exist.
    */
   stock: StockWriter;
+  /**
+   * Where a supplier's image URL goes to be copied.
+   *
+   * Injected for the same reason as the stock writer: media is a separate
+   * module, and only the composition root knows both exist.
+   */
+  images: ImageIngestor;
 }): CatalogModule => {
   const repository = createMongoProductRepository(deps.db);
   const collections = createMongoCollectionRepository(deps.db);
@@ -238,6 +245,7 @@ export const createCatalogModule = (deps: {
       ...wiring,
       reader: createXlsxWorkbookReader(),
       stock: deps.stock,
+      images: deps.images,
       now: deps.now,
       nextId: deps.nextId,
     }),

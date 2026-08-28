@@ -253,6 +253,93 @@ store settings are real configuration, three fake laptops are not. The fixtures
 cover the awkward shapes on purpose — an incomplete variant matrix, a live offer,
 a product with no imagery, and a draft that must stay hidden.
 
+## Images the shop owns
+
+Every catalogue picture used to be served by somebody else's machine. The
+importer reads an image URL straight out of a supplier's spreadsheet, so the
+storefront pointed at supplier CDNs — and that was two problems wearing one coat.
+
+The day a supplier tidies up a folder, products go blank. And **`next/image`
+cannot optimise a host it does not trust**, so using it would have meant listing
+every supplier domain in `remotePatterns` — turning the image optimiser into a
+proxy for anything nameable in a spreadsheet. That is why five `<img>` tags
+carried a lint suppression reading *"media hosts are a Phase 3 settings
+decision"*.
+
+**The shop now takes its own copy at import time.** Fetch once, check it is
+really an image, hash the bytes, store them, and rewrite the URL to
+`/media/<sha256>`. One origin, ours, that cannot disappear.
+
+### Content-addressed, which decides three other things
+
+The id is the SHA-256 of the bytes, and that single choice answers questions
+that would otherwise each need their own mechanism:
+
+- **Deduplication is free.** Forty spreadsheet rows sharing one photograph store
+  one image. Re-importing last month's sheet stores nothing at all — there is no
+  "have I done this already" flag to drift out of step with the data, because the
+  data is the answer.
+- **The URL is immutable, so it caches for a year.** Bytes that change are a
+  different id. There is nothing to invalidate and no revalidation to pay for.
+- **The write is idempotent by construction.** `$setOnInsert`, so storing the
+  same image twice is not a rewrite and does not move its timestamp.
+
+### What it refuses
+
+**SVG, deliberately.** An SVG is a document, not a picture: it can carry script
+and external references, and serving one from our own origin would run a
+supplier's markup inside the shop's security context. Every raster format
+accepted is inert by comparison. AVIF is refused for a duller reason — Next
+16.3.3 disables its AVIF decoder to patch an RCE, so accepting one would mean
+storing a picture the optimiser then refuses.
+
+Also refused: anything over 5 MB, an empty body behind a 200, and an HTML error
+page served as an image — which every CDN does eventually, and which without the
+content-type check would be stored as a product photograph.
+
+**A failure costs one picture, never the import.** A supplier CDN having a bad
+afternoon must not stop four hundred products from arriving. The product lands
+without that image, and the receipt names the slug, the URL and the reason, so
+the sheet can be fixed and re-imported.
+
+**A dry run fetches nothing.** A preview that pulled four hundred images off a
+supplier's CDN every time an operator adjusted a column mapping would be a
+preview with a cost.
+
+### Why the database, and why that is not forever
+
+Because the shop already has one. Atlas is provisioned, paid for, backed up and
+in the same region as the app; an object store is a second vendor, a second set
+of credentials and a second thing to be down. Product photographs are far below
+the 16 MB document cap, so a document each — not GridFS, which would add a
+chunking layer and a second collection for a case this shop does not have.
+
+That is a starting point, not a conviction. `ImageRepository` has three methods;
+an R2 adapter implements the same three and the composition root changes one
+line. **The port is what makes the decision reversible, which is the reason not
+to buy a vendor before there is a problem to solve.**
+
+### Two things the tests found that reading would not have
+
+**The middleware was swallowing every image.** `/media/<sha256>` has no file
+extension, and the locale matcher excluded only paths containing a dot — so
+next-intl redirected each one into the locale tree and every stored picture
+404ed. The e2e asked for one and got a 404.
+
+**`next/image` with `fill` needs a positioned parent.** Without it the image is
+laid out against the nearest positioned ancestor instead of its frame — which in
+the quick view meant the picture covered the dialog and intercepted every click
+on the variant buttons. Three containers needed `relative`.
+
+### The bundle budget went up, once
+
+From 200 KB to 215 KB. `next/image` costs about 11 KB of client runtime, loaded
+once and shared. A supplier photograph is 200-800 KB; served at tile size as
+WebP it is a few tens of KB, on every product page, for every visitor, most of
+them on a phone on a mobile network. That is the trade, and it is not close —
+but it is written down in `scripts/check-bundle-budget.mjs` rather than nudged,
+because forcing that argument is the entire job of a budget.
+
 ## The footer, and the pages a shop needs
 
 ```
