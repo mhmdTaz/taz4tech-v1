@@ -390,7 +390,7 @@ the type system forbids is not a gap in the tests.
 
 The catalogue was the last weak module at 93%, with fifty survivors across four
 files. It is at **97%** now, `media` went from 89% to **100%** in the same pass,
-and the domain as a whole is at **97.71% of 1,265 mutants**.
+and the domain as a whole is at **97.79% of 1,265 mutants**.
 
 **Six were a test shape that asserts nothing.** Written out:
 
@@ -1502,17 +1502,13 @@ conflict still throws: a dropped connection must never be reported as
   token in the link would fix it and would also break every confirmation already
   pasted into a WhatsApp thread. Worth deciding before the shop is busy enough for
   the numbers to be worth walking.
-- **29 mutants survive on the domain layer, and each one has an argument.** The
-  score is 97.71% against a floor of 97, so it cannot regress. Every module has
-  had its pass; `store`, `media` and `bulk-edit.ts` are at 100%. Of what is left,
-  nine are static — Stryker's blind spot, and `pnpm test:mutation:static` proves
-  or fails every one of them — and the rest are guards the type system requires,
-  a `-+` that can only ever match one character, and ties between values that
-  compare equal.
-
-  One is genuinely open: `stock.ts:110`, where `quantity < 1` can become
-  `quantity <= 1` unnoticed. Reserving exactly one unit is the single commonest
-  reservation there is, so this is worth a test rather than an argument.
+- **28 mutants survive on the domain layer, and every one has an argument.** The
+  score is 97.79% against a floor of 97, so it cannot regress. Every module has
+  had its pass; `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%. Of
+  what is left, nine are static — Stryker's blind spot, and
+  `pnpm test:mutation:static` proves or fails each of them — and the rest are
+  guards the type system requires, a `-+` that can only ever match one
+  character, and ties between values that compare equal.
 
   The four passes split completely differently from one another: the cart was a
   third real gaps, a third code worth deleting, a third equivalent; the order was
