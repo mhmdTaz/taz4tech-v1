@@ -6,7 +6,6 @@ import { hasLocale, NextIntlClientProvider } from 'next-intl';
 import { setRequestLocale } from 'next-intl/server';
 import { routing } from '@/i18n/routing';
 import '../globals.css';
-import { Suspense } from 'react';
 import { SiteFooter } from './site-footer';
 import { SiteHeader } from './site-header';
 
@@ -72,27 +71,41 @@ export default async function LocaleLayout({
       <body className="min-h-dvh antialiased">
         <NextIntlClientProvider>
           {/*
-            The header reads the cart cookie, which makes it dynamic. Behind its
-            own boundary so it cannot stop a page shell from being prerendered
-            per locale — the whole reason setRequestLocale is called above.
+            NOT behind a Suspense boundary, for the same reason the footer is
+            not — and this one was found the hard way.
+
+            The header carries the SKIP LINK: the first thing a keyboard user
+            reaches, and the whole reason they do not have to tab through the
+            nav on every page. Behind a boundary, whether it lands in the first
+            flush depends on whether reading the cookie beat the rest of the
+            page — and when it lost, the initial HTML had no skip link, so the
+            first Tab landed in the listing's search box instead. Intermittent,
+            silent, and exactly the user it is there for.
+
+            The boundary was justified here as protecting a prerendered shell.
+            There is no prerendered shell: every route under this layout is
+            server-rendered on demand, because the footer reads the database.
+            So it was buying nothing and costing the one thing it wrapped.
           */}
-          <Suspense fallback={<div className="h-[57px] border-hairline border-b bg-surface/60" />}>
-            <SiteHeader locale={locale} />
-          </Suspense>
+          <SiteHeader locale={locale} />
           <div id="content">{children}</div>
 
           {/*
-            NOT behind a boundary, unlike the header above it.
+            NOT behind a boundary either, and for the stronger of the two
+            reasons.
 
-            The header's Suspense resolves before the response flushes, because
-            reading a cookie is instant. The footer waits on a database round
-            trip, so React flushes the fallback and streams the real content in
-            afterwards using an inline script — which means a browser with
-            JavaScript disabled never sees it at all. That is merely annoying for
-            a product grid. For the one place the shop states who it is, under
-            Law 81/2018 Art. 31, a disclosure that needs JavaScript is not a
-            disclosure. Found by the e2e spec, which loads a page with JavaScript
-            off and reads the footer out of the HTML.
+            The footer waits on a database round trip, so behind a boundary
+            React flushes a fallback and streams the real content in afterwards
+            using an inline script — which means a browser with JavaScript
+            disabled never sees it at all. For the one place the shop states who
+            it is, under Law 81/2018 Art. 31, a disclosure that needs JavaScript
+            is not a disclosure. Found by the e2e spec, which loads a page with
+            JavaScript off and reads the footer out of the HTML.
+
+            Nothing under this layout is behind a boundary now. Each was removed
+            for its own reason, and the reasons rhyme: what a boundary buys is
+            an earlier first paint, and what it costs is that the content inside
+            it is only there IF it arrived in time.
 
             The cost is one indexed lookup by storeId before the response
             flushes. Every route under this layout is already server-rendered on
