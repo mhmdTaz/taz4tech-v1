@@ -1183,6 +1183,13 @@ What a Lebanese distance seller owes a consumer regardless of what these pages
 say is not here, and needs the same treatment the VAT question gets: a
 professional, not a guess.
 
+The questions are written down now — [`docs/legal-review.md`](docs/legal-review.md),
+a brief for a Lebanese lawyer. Every item names the sentence it would change, so
+an answer becomes an edit rather than a second round of interpretation. **One of
+them is a build rather than a paragraph**: nothing is sent to the customer in
+writing, and if a distance seller must provide written confirmation of the
+contract then the shop needs a sending channel it does not have.
+
 What the pages now do say is that **the promises are a floor**. Terms carries a
 *Your legal rights* section and returns carries the same sentence in the section
 headed with what cannot be taken back — the one a customer reads as a list of
@@ -1888,6 +1895,13 @@ conflict still throws: a dropped connection must never be reported as
   runs will say by how much, and the eight boxes at `/admin/settings` are where
   that goes. A flat table is also the cheapest thing for a customer to
   understand, so there is no hurry to break it up without evidence.
+- **The statutory content of `/returns` and `/terms` is unwritten**, and
+  deliberately so — the pages state what the shop promises and never what the
+  law requires. [`docs/legal-review.md`](docs/legal-review.md) is the brief:
+  four pages in scope, every question tied to the sentence it would change, and
+  §5.1 flagged first because it is the one that needs software rather than
+  wording. Answers land in English, Arabic and French, because a right that
+  exists only in the English version is not much of a right.
 - **One e2e flake is diagnosed; one is not.** `quick-view.spec.ts` flaked twice
   and the checkout confirmation's axe check once. The quick-view one is
   explained and fixed — a trigger clicked before hydration follows its href, and
