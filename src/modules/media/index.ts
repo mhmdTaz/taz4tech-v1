@@ -14,6 +14,7 @@ import {
   createMongoImageRepository,
   ensureMediaIndexes,
 } from './infrastructure/mongo-image-repository';
+import { createR2ImageRepository, type R2Config } from './infrastructure/r2-image-repository';
 
 export type { IngestFailure, IngestImage, IngestOutcome } from './application/ingest-image';
 export { describeIngestFailure } from './application/ingest-image';
@@ -39,8 +40,19 @@ export const createMediaModule = (deps: {
   db: Db;
   storeId: string;
   now: () => Date;
+  /**
+   * Where the bytes live. Absent means MongoDB, which is the default and was
+   * the only option until there was a reason for a second one.
+   *
+   * This is the line the Mongo adapter's comment promised: an object store
+   * arrives as four environment variables, and nothing above this file — not
+   * the use case, not the route that serves an image, not the importer — knows
+   * which one answered.
+   */
+  r2?: R2Config | null;
 }): MediaModule => {
-  const repository = createMongoImageRepository(deps.db);
+  const repository =
+    deps.r2 == null ? createMongoImageRepository(deps.db) : createR2ImageRepository(deps.r2);
 
   return {
     ingestImage: makeIngestImage({

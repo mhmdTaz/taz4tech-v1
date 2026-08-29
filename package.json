@@ -31,7 +31,8 @@
     "boundaries:verify": "node scripts/verify-boundary-rules.mjs",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "delivery:price": "tsx scripts/set-delivery-fees.ts",
-    "import:catalogue": "tsx scripts/import-catalogue.ts"
+    "import:catalogue": "tsx scripts/import-catalogue.ts",
+    "media:migrate": "tsx scripts/migrate-media.ts"
   },
   "dependencies": {
     "mongodb": "^7.6.0",

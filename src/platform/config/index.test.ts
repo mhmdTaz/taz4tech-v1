@@ -186,3 +186,51 @@ describe('getConfig', () => {
     expect(() => getConfig()).toThrow(ConfigError);
   });
 });
+
+describe('the R2 image store', () => {
+  const r2 = {
+    R2_ACCOUNT_ID: 'abc123',
+    R2_BUCKET: 'taz4tech-media',
+    R2_ACCESS_KEY_ID: 'AKIDEXAMPLE',
+    R2_SECRET_ACCESS_KEY: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+  };
+
+  it('is absent by default, which keeps images in Mongo', () => {
+    expect(parseConfig(valid).r2).toBeNull();
+  });
+
+  it('is read when all four are set', () => {
+    expect(parseConfig({ ...valid, ...r2 }).r2).toEqual({
+      accountId: 'abc123',
+      bucket: 'taz4tech-media',
+      accessKeyId: 'AKIDEXAMPLE',
+      secretAccessKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+    });
+  });
+
+  it.each(Object.keys(r2))('refuses to boot with %s missing, naming it', (missing) => {
+    /*
+     * Three of four would be a shop that boots and then stores its photographs
+     * somewhere nobody intended, or fails on the first upload at whatever hour
+     * somebody is importing a catalogue. There is no useful reading of half an
+     * object store, so it is a startup error that says which one is absent.
+     */
+    const partial = { ...valid, ...r2, [missing]: undefined };
+
+    expect(() => parseConfig(partial)).toThrow(ConfigError);
+    expect(() => parseConfig(partial)).toThrow(new RegExp(`missing: ${missing}`));
+  });
+
+  it('treats blank as absent, because that is what Render writes', () => {
+    // Declaring the variables in render.yaml without filling them in must read
+    // as "no R2", not as a boot failure — the same reason the admin pair does.
+    const blank = {
+      ...valid,
+      R2_ACCOUNT_ID: '',
+      R2_BUCKET: '',
+      R2_ACCESS_KEY_ID: '',
+      R2_SECRET_ACCESS_KEY: '',
+    };
+    expect(parseConfig(blank).r2).toBeNull();
+  });
+});

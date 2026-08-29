@@ -61,7 +61,14 @@ export const buildContainer = async (): Promise<Container> => {
     now: () => clock.now(),
   });
 
-  const media = createMediaModule({ db, storeId: config.storeId, now: () => clock.now() });
+  const media = createMediaModule({
+    db,
+    storeId: config.storeId,
+    now: () => clock.now(),
+    // Null unless all four R2 variables are set, in which case product
+    // photographs live in the bucket instead of the database.
+    r2: config.r2,
+  });
 
   const catalog = createCatalogModule({
     db,
