@@ -577,6 +577,9 @@ report describes and the runner did not test.
 
 The last **seven** are Stryker's own blind spot, below.
 
+Every one of them is an entry in `scripts/check-static-mutants.mjs` now, replayed
+on each run — see *Every survivor is declared, and the declaration is checked*.
+
 ### The mutants Stryker cannot kill
 
 Stryker switches one mutant on and re-runs the tests. That works for code inside
@@ -610,6 +613,53 @@ proven caught, or a hole. `--all` replays the non-static survivors too, as a
 survey — with the caveat that it applies each replacement as *written*, where
 Stryker parenthesises it, so a swapped operator can bind differently under the
 two. `collection.ts` has one that disagrees for exactly that reason.
+
+### Every survivor is declared, and the declaration is checked
+
+The four passes left twenty-eight mutants alive across the domain layer. Going
+back to the catalogue's nineteen to look for more to kill turned up **none** —
+for each one, killing it would need an input that cannot exist:
+
+- the five `x !== undefined` guards need a comparison against `undefined` to be
+  **true**, and JavaScript never makes one true;
+- the three `-+` regexes need a double hyphen, and the line above collapses every
+  run of non-alphanumerics into exactly one;
+- the two price ties need two `Money` values that compare equal but differ, and
+  `Currency` is a single-member union with a phantom brand, so equal means
+  identical;
+- the `?? []` fallback needs a fallback array that behaves differently, and the
+  loop it feeds only refuses a blank string.
+
+So the work was not killing them. It was that **the arguments lived in this
+file, hundreds of lines from the code, and nothing re-read them.** A survivor
+list with an essay attached is indistinguishable from a survivor list nobody has
+looked at — and if a future edit made one of those mutants killable, it would
+simply stay on the list, still looking settled.
+
+Each is now an entry in `scripts/check-static-mutants.mjs` with the reason
+beside it, and every entry declares what a replay should do:
+
+```bash
+pnpm test:mutation:static
+```
+
+It replays **all twenty-eight** against the real suite. A declared-equivalent
+mutant that gets caught fails the run; so does a survivor with nothing said
+about it. The failure names the file, the line, the mutator and the direction of
+the disagreement, and says explicitly not to move the expectation to match the
+observation without reading why it moved.
+
+**`replay` is not always `survives`.** `collection.ts:122` declares that the
+replay will *catch* it, because Stryker parenthesises what it substitutes and
+this script writes the replacement in as the report prints it — `&&` binds
+tighter than `||`, so the two tools run different mutations and are each right
+about theirs. Encoding that as an expectation rather than an exception means the
+odd one out is still checked.
+
+The gate was verified by falsifying one claim on purpose: the run failed, named
+`product.ts:167`, and exited 1. Restored, it exits 0.
+
+**The number can go down. It cannot go up quietly.**
 
 #### The rule underneath all of it
 
@@ -1964,13 +2014,16 @@ conflict still throws: a dropped connection must never be reported as
 
   **The axe failure remains unexplained and should not be assumed to be the same
   cause.** It has not recurred, which is not the same as being gone.
-- **28 mutants survive on the domain layer, and every one has an argument.** The
-  score is 97.78% of 1,263 against a floor of 97, so it cannot regress. Every module has
-  had its pass; `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%. Of
-  what is left, nine are static — Stryker's blind spot, and
-  `pnpm test:mutation:static` proves or fails each of them — and the rest are
-  guards the type system requires, a `-+` that can only ever match one
-  character, and ties between values that compare equal.
+- **28 mutants survive on the domain layer, and every one of them is now
+  declared.** The score is 97.78% of 1,263 against a floor of 97, so it cannot
+  regress; `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%.
+
+  This entry used to say *every one has an argument*, and the arguments lived
+  here, several hundred lines from the code. They live in
+  `scripts/check-static-mutants.mjs` now, one per survivor, and **`pnpm
+  test:mutation:static` replays all twenty-eight against the real suite and
+  fails if any behaves differently from its claim.** A survivor with nothing
+  said about it also fails. The number can go down; it cannot go up quietly.
 
   The four passes split completely differently from one another: the cart was a
   third real gaps, a third code worth deleting, a third equivalent; the order was

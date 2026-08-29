@@ -44,12 +44,21 @@ const REPORT = process.argv.find((arg) => arg.endsWith('.json')) ?? 'stryker-rep
 const UNPROVEN = new Set(['Survived', 'NoCoverage', 'Ignored']);
 
 /**
- * Static mutants no test can ever kill, each with the reason it cannot.
+ * Mutants no test can kill, each with the reason it cannot.
  *
  * Kept short and argued. An entry here is a claim that the mutation changes
- * nothing observable — not that writing the test looked like work. The mutants
- * are still replayed: if one of these ever gets caught, the claim is wrong and
- * the run fails, which is how the list stays honest.
+ * nothing observable — not that writing the test looked like work. Every one is
+ * still replayed against the real suite, and every one declares what that
+ * replay should do; a claim whose outcome changes is a claim that has gone
+ * stale, and the run fails rather than leaving it on the survivor list looking
+ * settled.
+ *
+ * `replay` is what the TEXTUAL splice is expected to produce, which is not
+ * always what Stryker produced. Stryker parenthesises what it substitutes; this
+ * script writes the replacement into the file exactly as the report prints it.
+ * For a swapped operator inside a larger expression the two can bind
+ * differently, and where they do the entry says so rather than the disagreement
+ * being read as a bug in either.
  */
 const EQUIVALENT = [
   {
@@ -59,7 +68,83 @@ const EQUIVALENT = [
     // with every edit above it. `count` is what stops the exemption from
     // quietly spreading to a new array added to the same file later.
     count: 2,
+    replay: 'survives',
     why: 'The transition table is searched with includes() against a real OrderStatus, and "Stryker was here" is not one. A mutation the type system forbids is not a gap in the tests.',
+  },
+  {
+    file: 'src/modules/catalog/domain/collection.ts',
+    replacement: '["Stryker was here"]',
+    count: 1,
+    replay: 'survives',
+    why: 'The `?? []` fallback is only reached when rules.brands is absent, and the loop it feeds only refuses a BLANK brand. Any array of non-blank strings behaves identically, so no fallback value can be distinguished from the empty one.',
+  },
+  {
+    file: 'src/modules/catalog/domain/collection.ts',
+    replacement: 'true',
+    count: 5,
+    replay: 'survives',
+    why: 'The five `x !== undefined` guards. Each exists for the type checker, not for the runtime: `undefined < 0` and `undefined > n` are both false, so dropping a guard leaves the comparison it protects false anyway. Distinguishing one would need a comparison against undefined to be TRUE, which JavaScript never does.',
+  },
+  {
+    file: 'src/modules/catalog/domain/collection.ts',
+    replacement: 'min !== undefined || max !== undefined',
+    count: 1,
+    // The one place the two tools disagree, and the disagreement is real rather
+    // than a fault: Stryker ran `(min !== undefined || max !== undefined) && min > max`,
+    // which is equivalent; written into the file as printed, `&&` binds tighter
+    // and it becomes `min !== undefined || (max !== undefined && min > max)`,
+    // which refuses every open-ended price rule.
+    replay: 'caught',
+    why: 'Equivalent as Stryker ran it, because reaching `min > max` still needs both bounds. Not equivalent as the report PRINTS it, because && binds tighter than || — so the replay catches it and Stryker did not, and both are right about different mutations.',
+  },
+  {
+    file: 'src/modules/catalog/domain/product.ts',
+    replacement: '/^-|-+$/g',
+    count: 1,
+    replay: 'survives',
+    why: 'A double hyphen cannot exist at this point: the line above replaces every run of non-alphanumerics with ONE hyphen, so `-+` can only ever match a single character.',
+  },
+  {
+    file: 'src/modules/catalog/domain/product.ts',
+    replacement: '/^-+|-$/g',
+    count: 1,
+    replay: 'survives',
+    why: 'Same as the leading-hyphen case: runs are already collapsed, so `-+` and `-` match identically here.',
+  },
+  {
+    file: 'src/modules/catalog/domain/product.ts',
+    replacement: '/-$/g',
+    count: 1,
+    replay: 'survives',
+    why: 'The slice cannot create a double hyphen either, so the trailing trim has at most one character to remove.',
+  },
+  {
+    file: 'src/modules/catalog/domain/product.ts',
+    replacement: 'compare(price, lowest) <= 0',
+    count: 1,
+    replay: 'survives',
+    why: 'On a tie this returns the other Money value, and Money is { cents, currency } with Currency a single-member union — two that compare equal are structurally identical. Which object comes back is not a question a caller can ask.',
+  },
+  {
+    file: 'src/modules/catalog/domain/product.ts',
+    replacement: 'compare(price, highest) >= 0',
+    count: 1,
+    replay: 'survives',
+    why: 'The same tie, at the other end of the range.',
+  },
+  {
+    file: 'src/modules/cart/domain/cart.ts',
+    replacement: 'false',
+    count: 5,
+    replay: 'survives',
+    why: 'Five guards in parseCart/readLine whose case a later check refuses anyway: an absent or empty cookie reaches base64 decoding and throws into the catch; a null decode is stringified by JSON.parse and fails Array.isArray; a non-object entry destructures to undefined fields and fails the typeof checks below; a non-number quantity fails Number.isInteger. Each states its case plainly instead of leaving control flow to depend on a throw, which is why they stay.',
+  },
+  {
+    file: 'src/modules/cart/domain/cart.ts',
+    replacement: '{}',
+    count: 2,
+    replay: 'survives',
+    why: 'The two catch blocks. Emptying either leaves the value undefined rather than EMPTY_CART or null, and every path from there ends at the same empty cart — Array.isArray(undefined) is false, and JSON.parse(undefined) throws into the outer catch.',
   },
 ];
 
@@ -107,18 +192,22 @@ const pending = Object.entries(report.files)
   .filter(([file]) => !file.endsWith('.test.ts'))
   .flatMap(([file, data]) =>
     data.mutants
-      .filter((mutant) => (ALL || mutant.static === true) && UNPROVEN.has(mutant.status))
+      .filter(
+        (mutant) =>
+          UNPROVEN.has(mutant.status) &&
+          // Static ones because Stryker could not reach them; declared ones
+          // because a claim nobody re-checks is a claim that quietly rots.
+          (ALL || mutant.static === true || entryFor(file, mutant) !== undefined),
+      )
       .map((mutant) => ({ file, mutant })),
   );
 
 if (pending.length === 0) {
-  console.log('No static mutants to prove. Nothing to do.');
+  console.log('Nothing to prove.');
   process.exit(0);
 }
 
-console.log(
-  `Proving ${pending.length} ${ALL ? 'surviving' : 'static'} mutants against the suite.\n`,
-);
+console.log(`Replaying ${pending.length} surviving mutants against the suite.\n`);
 
 const originals = new Map();
 for (const { file } of pending) {
@@ -152,10 +241,20 @@ try {
     restore();
 
     const verdict = survived ? 'SURVIVED' : 'caught  ';
-    console.log(`  ${verdict}  ${where}${equivalent ? '  (declared equivalent)' : ''}`);
+    // Each declared entry says what the replay should do. Usually "survives" —
+    // it is an equivalence claim. One says "caught", because the report prints
+    // a replacement that binds differently from the one Stryker ran.
+    const expected = entry?.replay ?? 'survives';
+    const asExpected = survived === (expected === 'survives');
+
+    console.log(
+      `  ${verdict}  ${where}${equivalent ? `  (declared equivalent, expected to be ${expected === 'survives' ? 'unkillable' : 'caught by the replay'})` : ''}`,
+    );
 
     if (survived && !equivalent) escaped.push({ where, replacement: mutant.replacement });
-    if (!survived && equivalent) stale.push(where);
+    if (equivalent && !asExpected) {
+      stale.push(`${where} — declared ${expected}, replay ${survived ? 'survived' : 'caught it'}`);
+    }
   }
 } finally {
   restore();
@@ -180,21 +279,31 @@ if (miscounted.length > 0) {
 }
 
 if (stale.length > 0) {
-  console.error('\nDeclared equivalent, but the suite caught them — the claim is wrong:\n');
+  console.error('\nAn equivalence claim no longer behaves the way it says it does:\n');
   for (const where of stale) console.error(`  ${where}`);
-  console.error('\nRemove the entry from EQUIVALENT in this script.');
+  console.error(
+    '\nEither the code changed and the mutant is now killable — write the test and\n' +
+      'remove the entry — or the claim was wrong to begin with. Do not move the\n' +
+      'expectation to match the observation without reading why it moved.',
+  );
   process.exit(1);
 }
 
 if (escaped.length > 0) {
-  console.error(`\n${escaped.length} static mutant(s) no test noticed:\n`);
+  console.error(`\n${escaped.length} mutant(s) survived with nothing said about them:\n`);
   for (const { where, replacement } of escaped) {
     console.error(
       `  ${where}\n    replaced with: ${replacement.replace(/\s+/g, ' ').slice(0, 120)}`,
     );
   }
-  console.error('\nThese run once at module load and build a value everything else trusts.');
+  console.error(
+    '\nEither write a test that catches it, or add it to EQUIVALENT with the reason\n' +
+      'no test can. A survivor with no argument next to it is one nobody has read.',
+  );
   process.exit(1);
 }
 
-console.log(`\nAll ${pending.length} static mutants accounted for.`);
+console.log(
+  `\nAll ${pending.length} accounted for: caught by the suite, or declared equivalent\n` +
+    'with an argument and behaving as declared.',
+);
