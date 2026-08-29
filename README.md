@@ -115,6 +115,7 @@ through `parseFloat`, which would turn `"1.115"` into 111 cents instead of 112.
 | `pnpm delivery:price <amount>` | Sets one delivery price for all eight governorates. Local databases only unless `TAZ_SEED_TARGET` names the database |
 | `pnpm bundle:budget` | Fails if client JS crosses its ceiling |
 | `pnpm build:offline` | `pnpm build` with no database reachable, the way CI builds it |
+| `pnpm db:check` | Proves a connection string authenticates and can read, without printing it |
 | `pnpm seed` | Creates the store settings document if there is none, and otherwise leaves it alone |
 | `pnpm seed --reset` | Overwrites it with the defaults. Local databases only unless `TAZ_SEED_TARGET` names the database |
 | `pnpm seed:demo` | Loads demo products. Local databases only, same override |
@@ -1557,6 +1558,57 @@ database being fresh.
 The decision lives in `ensureStoreSettings`, not in the script, so "does this
 already exist" is unit-tested rather than trusted. `saveStoreSettings` is the
 separate door that overwrites, and nothing reaches it by accident.
+
+### Rotating the Atlas password
+
+The connection string for this shop was pasted into a chat window during setup.
+Nothing in the repository has ever held it — every commit on every ref has been
+checked, and `.env.*` is ignored — but **a secret that has been pasted anywhere
+is spent**, and the only sound response to "it was probably fine" is to make it
+irrelevant.
+
+**Do not edit the existing user's password.** Atlas applies it immediately, the
+running site loses its database mid-request, and the rotation becomes an
+outage with a deploy queued behind it. Rotate by replacing the user instead, so
+there is never a moment when no valid credential exists:
+
+1. **Create a second database user** in Atlas — new name, new password, the same
+   role, scoped to this database only.
+
+2. **Check it before anything depends on it.**
+
+   ```bash
+   MONGODB_URI='mongodb+srv://NEW_USER:NEW_PASSWORD@cluster0.xxxxx.mongodb.net/' pnpm db:check
+   ```
+
+   It connects, pings, and reports the host, the database, **which user the
+   server thinks you are**, and how many collections that user can read. It
+   never prints the connection string, on any path including the failure one —
+   a credential in a terminal is a credential in the scrollback, and this is run
+   while holding exactly that.
+
+   It is read-only by construction, which is why it is not `pnpm seed` with a
+   different connection string: a writer pointed at an unknown database to find
+   out whether it works is how a check becomes an incident.
+
+3. **Update `MONGODB_URI` in the Render dashboard** and deploy. This step is
+   already safe: `healthCheckPath` is `/api/health`, which pings the database
+   rather than only the process, so a wrong connection string **fails the deploy
+   while the previous version keeps serving**. That is the whole reason the
+   health check talks to Mongo.
+
+4. **Confirm the site is live** on the new deploy — one product page is enough.
+
+5. **Update `.env.local`** on the development machine, which is the copy that
+   gets forgotten.
+
+6. **Only then, delete the old Atlas user.** Until this step the old credential
+   still works, which means every earlier step is reversible by putting the old
+   string back.
+
+The order is the point. Steps 1 to 5 leave two working credentials; step 6 is
+the only irreversible one and it happens after the new path is proven end to
+end.
 
 ### Two commands that must not reach production
 
