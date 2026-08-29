@@ -59,6 +59,19 @@ const EnvSchema = z.object({
    */
   ADMIN_PASSWORD: optionalSecret(12, 'ADMIN_PASSWORD'),
   ADMIN_SESSION_SECRET: optionalSecret(32, 'ADMIN_SESSION_SECRET'),
+
+  /**
+   * Cloudflare R2, for product photographs. All four together or none.
+   *
+   * Absent, images are stored in MongoDB, which is where they have always been
+   * and is a perfectly good answer for a catalogue this size — see
+   * mongo-image-repository.ts. These exist so moving is a deploy rather than a
+   * rewrite.
+   */
+  R2_ACCOUNT_ID: optionalSecret(1, 'R2_ACCOUNT_ID'),
+  R2_BUCKET: optionalSecret(1, 'R2_BUCKET'),
+  R2_ACCESS_KEY_ID: optionalSecret(1, 'R2_ACCESS_KEY_ID'),
+  R2_SECRET_ACCESS_KEY: optionalSecret(1, 'R2_SECRET_ACCESS_KEY'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -69,6 +82,14 @@ export type AdminConfig = {
   readonly sessionSecret: string;
 };
 
+/** Present only when all four R2 variables are set; null keeps images in Mongo. */
+export type R2Config = {
+  readonly accountId: string;
+  readonly bucket: string;
+  readonly accessKeyId: string;
+  readonly secretAccessKey: string;
+};
+
 export type Config = {
   readonly env: Env['NODE_ENV'];
   readonly isProduction: boolean;
@@ -77,6 +98,7 @@ export type Config = {
   readonly siteUrl: string;
   readonly logLevel: Env['LOG_LEVEL'];
   readonly admin: AdminConfig | null;
+  readonly r2: R2Config | null;
 };
 
 export class ConfigError extends Error {
@@ -115,6 +137,30 @@ export const parseConfig = (source: Record<string, string | undefined>): Config 
     ]);
   }
 
+  /*
+   * Same rule as the admin pair, and it matters more here.
+   *
+   * Three of four set would mean a shop that boots, serves, and stores its
+   * photographs somewhere nobody intended — or fails on the first upload, at
+   * whatever hour somebody is importing a catalogue. There is no useful reading
+   * of a partial object store.
+   */
+  const r2Fields = [
+    ['R2_ACCOUNT_ID', env.R2_ACCOUNT_ID],
+    ['R2_BUCKET', env.R2_BUCKET],
+    ['R2_ACCESS_KEY_ID', env.R2_ACCESS_KEY_ID],
+    ['R2_SECRET_ACCESS_KEY', env.R2_SECRET_ACCESS_KEY],
+  ] as const;
+
+  const missing = r2Fields.filter(([, value]) => value === undefined);
+  if (missing.length > 0 && missing.length < r2Fields.length) {
+    throw new ConfigError([
+      `R2 is half-configured. Set all four or none; missing: ${missing
+        .map(([name]) => name)
+        .join(', ')}.`,
+    ]);
+  }
+
   return {
     env: env.NODE_ENV,
     isProduction: env.NODE_ENV === 'production',
@@ -126,6 +172,18 @@ export const parseConfig = (source: Record<string, string | undefined>): Config 
       ADMIN_PASSWORD === undefined || ADMIN_SESSION_SECRET === undefined
         ? null
         : { password: ADMIN_PASSWORD, sessionSecret: ADMIN_SESSION_SECRET },
+    r2:
+      env.R2_ACCOUNT_ID === undefined ||
+      env.R2_BUCKET === undefined ||
+      env.R2_ACCESS_KEY_ID === undefined ||
+      env.R2_SECRET_ACCESS_KEY === undefined
+        ? null
+        : {
+            accountId: env.R2_ACCOUNT_ID,
+            bucket: env.R2_BUCKET,
+            accessKeyId: env.R2_ACCESS_KEY_ID,
+            secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+          },
   };
 };
 

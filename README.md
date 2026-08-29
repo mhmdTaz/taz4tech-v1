@@ -119,6 +119,7 @@ through `parseFloat`, which would turn `"1.115"` into 111 cents instead of 112.
 | `pnpm seed --reset` | Overwrites it with the defaults. Local databases only unless `TAZ_SEED_TARGET` names the database |
 | `pnpm seed:demo` | Loads demo products. Local databases only, same override |
 | `pnpm import:catalogue <file.xlsx>` | Dry-run a catalogue import; add `--commit` to apply |
+| `pnpm media:migrate` | Dry-run copying images from MongoDB to R2; add `--commit` to apply |
 
 ### Running the integration tests
 
@@ -895,6 +896,88 @@ That is a starting point, not a conviction. `ImageRepository` has three methods;
 an R2 adapter implements the same three and the composition root changes one
 line. **The port is what makes the decision reversible, which is the reason not
 to buy a vendor before there is a problem to solve.**
+
+That adapter now exists — see below — and the claim held: one line at the
+composition root, and nothing above it changed.
+
+### The image store moved behind four environment variables
+
+`ImageRepository` has had three methods and one implementation since Phase 3.4,
+and the Mongo adapter's comment said what the port was for: *an R2 adapter
+implements the same three methods and the composition root changes one line.*
+That line is now written, and it turned out to be true — `createMediaModule`
+picks an adapter, and nothing above it knows which one answered. Not the use
+case, not the importer, not the route that serves an image.
+
+**Images stay in MongoDB unless all four R2 variables are set.** That is still
+the right default for a catalogue of a few thousand photographs: Atlas is
+provisioned, paid for and backed up, and Cloudflare caches these URLs forever
+because they are content-addressed. R2 is here for when egress shows up on a
+bill, not because an object store is the tidier idea.
+
+**Three of four is a startup error.** Half an object store has no useful
+reading: a shop that boots and stores its photographs somewhere nobody intended,
+or one that fails on the first upload at whatever hour a catalogue is being
+imported. The message names the ones that are missing.
+
+#### No AWS SDK
+
+`@aws-sdk/client-s3` brings several dozen packages. This project has seven
+runtime dependencies and `pnpm audit --prod` gates every PR — the S3 client
+would roughly double the surface that audit covers, to sign three requests.
+
+So SigV4 is written out in `platform/s3`, on WebCrypto, the same way the admin
+session signer is. Two things make that a reasonable trade rather than a brave
+one. **A signing bug fails closed**: a wrong signature is a 403 from the far
+end, immediate and loud, and it cannot authorise anything — the secret never
+leaves the process. And **the algorithm is fixed and published**, so it can be
+tested against Amazon's own vectors rather than against itself. The
+`get-vanilla` case from `aws-sig-v4-test-suite` is asserted byte for byte,
+signature included.
+
+#### What can be tested without a bucket, and what cannot
+
+There are no R2 credentials in CI and there should not be: a suite that needs a
+live vendor account goes red when somebody else's billing lapses.
+
+Everything the adapter is responsible for is checked against a stubbed `fetch` —
+the URL it builds, the headers it signs, the body it sends, and what it does
+with each answer. Including the ones that matter under failure: a 404 is null, a
+503 **throws** rather than reporting a broken bucket as an empty one, and an
+object whose content type this shop does not store is refused rather than served
+(a bucket is writable by other things, and an SVG served back as a product
+photograph is a script the storefront would embed).
+
+The expected payload hash in those tests comes from `node:crypto`, not from the
+adapter. A test asserting whatever the code produced would pass just as happily
+on the hash of an empty body — which is the actual bug worth catching, and one
+that only shows up against a real bucket.
+
+**What is not tested is whether Cloudflare agrees.** The first real request says
+that, and nothing here can.
+
+#### Moving is a script, then a deploy, in that order
+
+Setting the variables changes where images are READ from as well as written to,
+so every photograph already in Mongo becomes a 404 the moment the deploy goes
+live.
+
+```bash
+pnpm media:migrate            # lists what would be copied
+pnpm media:migrate --commit   # copies it
+```
+
+Run it against production with the variables set **in the shell**, confirm the
+count, then set them on the service. Between those two the bucket has everything
+and the app is still reading from Mongo, which is a state where nothing is
+broken. It is safe to run twice — an id is the SHA-256 of its bytes, so anything
+already there is skipped — and it never deletes from Mongo, which is the
+difference between a reversible migration and a one-way door.
+
+It builds both adapters by name rather than using the container's. By the time
+it runs the container is already pointing at R2, so reading through it would ask
+the destination for images the source is holding, find nothing to do, and report
+success.
 
 ### Two things the tests found that reading would not have
 

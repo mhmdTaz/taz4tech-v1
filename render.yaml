@@ -58,6 +58,23 @@ services:
       - key: ADMIN_SESSION_SECRET
         sync: false
 
+      # Cloudflare R2, for product photographs. ALL FOUR or NONE — three of four
+      # is a startup error rather than a shop that stores its images somewhere
+      # nobody intended.
+      #
+      # Left blank here, which reads as "keep images in MongoDB". Filling them in
+      # moves READS as well as writes, so run `pnpm media:migrate --commit`
+      # against production BEFORE the deploy that sets them, or every product
+      # page loses its photographs at the moment the deploy goes live.
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+
       # The importer is finished, but the screen that writes to the catalogue
       # stays behind a switch that can be turned off without a deploy.
       - key: TAZ_FLAG_EXCEL_IMPORTER
