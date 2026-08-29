@@ -474,7 +474,7 @@ the type system forbids is not a gap in the tests.
 
 The catalogue was the last weak module at 93%, with fifty survivors across four
 files. It is at **97%** now, `media` went from 89% to **100%** in the same pass,
-and the domain as a whole is at **97.79% of 1,265 mutants**.
+and the domain as a whole was at **97.79% of 1,265 mutants** after this pass.
 
 **Six were a test shape that asserts nothing.** Written out:
 
@@ -1350,9 +1350,9 @@ cannot set a cookie; the better one is that a cart which quietly shrinks while
 you look at it is a customer wondering what they forgot.
 
 **Prices are VAT-inclusive.** Lebanese retail quotes what the customer pays, so
-nothing is added on top. Whether a "of which VAT" line can be broken out depends
-on registration, which is not settled — and it is derivable from the same totals
-later without changing what anybody pays.
+nothing is added on top. Whether an "of which VAT" line can be broken out
+depends on registration, which is not settled — and it is derivable from the
+same totals later without changing what anybody pays.
 
 ## Stock
 
@@ -1601,10 +1601,12 @@ Atlas is the intended workflow rather than the accident.
 
 The shop's own details, and what delivery costs.
 
-**Every box on this screen changes something a customer can see.** The name, the
-phone number and the registry number appear on the storefront; the VAT rate is
-what the shop quotes; the delivery prices are what every order is charged.
-Nothing else is offered as a field.
+**Every box on this screen changes something a customer can see, except one.**
+The name, the phone number and the registry number appear on the storefront; the
+delivery prices are what every order is charged. Nothing else is offered as a
+field.
+
+The exception is the VAT rate, and it is labelled as one — see below.
 
 That rule is the whole design of the screen. `StoreSettings` also holds the
 locales, the default locale and a site URL — and none of those are read at
@@ -1627,6 +1629,63 @@ are read as characters rather than through a float, so `11.15` does not arrive a
 `11.149999999999999` and truncate to 1114. It also inherits the refusal to guess
 at a comma — `11,5` is rejected as ambiguous rather than silently read as eleven
 and a half or a hundred and fifteen.
+
+### The VAT rate is recorded, not applied
+
+This file used to introduce the settings screen with *every box on this screen
+changes something a customer can see*, and then, two paragraphs later, state the
+rule that **a box which accepts an edit and changes nothing is worse than no
+box** — because the operator believes they changed something and nobody finds
+out until a customer does.
+
+The VAT rate was that box. It survived the Phase 3.6 sweep that removed
+`siteUrl`, `locales` and `defaultLocale` for exactly this, presumably because a
+tax rate *feels* like it must matter.
+
+It does not, today. Nothing reads it. Prices are typed VAT-inclusive, no total
+adds anything on top, and no page anywhere shows a tax line. Editing the field
+changes one number in one document and nothing else in the system.
+
+**So the screen says that now**, in the field's own hint rather than in a
+document nobody opens while they are typing: *recorded, not applied; changing
+this does not change what anyone pays; stored for when registration is settled.*
+
+**And `vatRate` is gone.** It converted basis points to a multiplier, it was
+exported from the module barrel, and its only caller was its own test. An
+exported function with no consumer reads as a wired-up feature to whoever finds
+it next — which is precisely how a field nobody applies comes to look like one
+that is applied. The conversion is one line and comes back with something that
+calls it.
+
+#### What registering would actually change here
+
+Worth writing down, because the decision has been open since Phase 1 and *"ask
+an adviser"* is easier to act on when the cost of each answer is known. None of
+this is advice; it is the engineering half of it.
+
+**If the shop does not have to register**, nothing changes. The field stays
+recorded-not-applied, and the storefront is already correct: prices are what the
+customer pays, and no tax is claimed anywhere.
+
+**If it does**, the work is small and entirely additive, because prices stay
+VAT-inclusive either way — Lebanese retail quotes the final number, so no
+customer-facing price moves:
+
+- **An order needs a tax breakdown.** `vat = total × rate ÷ (1 + rate)`, computed
+  from the totals already stored. It is a derived line on the confirmation and
+  the admin order screen, not a new charge.
+- **The rate has to be captured on the order, not read live.** An order is a
+  snapshot; a rate that changed last month must not restate what a receipt said
+  last month. That is one more field on `Order`, alongside the delivery fee it
+  already freezes.
+- **The registry number becomes required rather than optional.** The footer
+  already hides the line until there is one, so this is a validation change and
+  a value to type.
+- **`vatRate` comes back**, with a caller.
+
+What it does **not** touch: the cart, the checkout, the delivery table, or any
+displayed price. That is the whole benefit of quoting VAT-inclusive from the
+start.
 
 **The shop's own phone goes through the same door as a customer's.** `03 123 456`
 and `+961 3 123 456` are one number, stored one way, so the storefront never
@@ -1811,9 +1870,17 @@ conflict still throws: a dropped connection must never be reported as
 
 ## Open decisions
 
-- **VAT.** 11% is configured. Whether this store must register depends on the
-  LBP 5bn threshold; advisory sources claim importers must register regardless of
-  turnover, but that is not primary-sourced and needs a Lebanese tax adviser.
+- **VAT registration.** 11% is recorded and applied to nothing — the field says
+  so on the screen now, and the code that converted it is gone rather than
+  sitting there looking wired up. Whether this store must register depends on
+  the LBP 5bn threshold; advisory sources claim importers must register
+  regardless of turnover, but that is not primary-sourced, and it is not a
+  question a codebase can answer. **It needs a Lebanese tax adviser.**
+
+  What each answer costs is written down under *The VAT rate is recorded, not
+  applied* — no changes at all if the shop need not register, and an additive
+  tax line plus a rate frozen onto each order if it must. No displayed price
+  moves either way, because prices are VAT-inclusive already.
 - **Delivery is $4.00 to every governorate, and that is a starting number.** It
   was set from `pnpm delivery:price 4.00` rather than from deliveries that have
   actually happened, so it is the first honest guess and not a finding. Akkar and
@@ -1832,7 +1899,7 @@ conflict still throws: a dropped connection must never be reported as
   **The axe failure remains unexplained and should not be assumed to be the same
   cause.** It has not recurred, which is not the same as being gone.
 - **28 mutants survive on the domain layer, and every one has an argument.** The
-  score is 97.79% against a floor of 97, so it cannot regress. Every module has
+  score is 97.78% of 1,263 against a floor of 97, so it cannot regress. Every module has
   had its pass; `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%. Of
   what is left, nine are static — Stryker's blind spot, and
   `pnpm test:mutation:static` proves or fails each of them — and the rest are

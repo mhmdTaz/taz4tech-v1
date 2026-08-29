@@ -41,7 +41,6 @@ export {
   deliveryFeeFor,
   deliverySpread,
   showsRegistryNumber,
-  vatRate,
 } from './domain/store-settings';
 
 export type StoreModule = {
