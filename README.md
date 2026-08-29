@@ -661,6 +661,63 @@ The gate was verified by falsifying one claim on purpose: the run failed, named
 
 **The number can go down. It cannot go up quietly.**
 
+### What the gate had never looked at
+
+`media/image.ts` was the last file on the survivor list with anything left to
+kill, and it had nothing: 35 mutants, 35 killed, closed during the catalogue
+pass. So the question turned into a different one — **what is the mutation gate
+not measuring at all?**
+
+`mutate` has always been `src/modules/*/domain/**`. Pointing it one directory
+further, for the first time, found two adapters with **no unit tests of any
+kind**:
+
+| | before | after |
+| --- | ---: | ---: |
+| `http-image-fetcher.ts` | 0%, 68 mutants uncovered | **97%** |
+| `r2-image-repository.ts` | 88%, 4 survivors + 5 uncovered | **96%** |
+| `xlsx-workbook-reader.ts` | 0%, 55 mutants uncovered | still 0% |
+
+**The fetcher is the file that most deserved a test.** It is the one place the
+shop makes an outbound request to a URL somebody else wrote, and every rule in
+it was argued in a comment and enforced by nothing: refuse `file:` before
+reaching the network, re-check the scheme on the URL that *answered* because
+fetch follows redirects itself, refuse an oversized `Content-Length` **before
+reading a byte**, and measure the bytes anyway because Content-Length is a claim
+rather than a measurement. Four security properties, zero tests. The header
+check now asserts the body was never read, which is the only version of that
+test that means anything — the refusal alone would pass while the 200 MB was
+already in memory.
+
+**And the R2 adapter I had just written had real gaps**, which is the more
+useful half of this. Its default `now` parameter — the one the composition root
+actually uses, since production calls it with a single argument — had never once
+been executed. A response with no `Last-Modified` had no assertion on what date
+it got, so it could silently have become the epoch. And the invariant check that
+refuses an object the domain would reject was never reached.
+
+#### A test that passed for the wrong reason
+
+The content-type trimming was asserted with `'  image/webp  '`, which proves
+nothing: `Headers` normalises whitespace at the ends of a value, so the trim
+never ran. The case that reaches it is a space **before** the semicolon —
+`'image/png ; charset=binary'` — because `split(';')[0]` keeps it. Mutation
+testing found that by deleting `.trim()` and watching nothing fail.
+
+#### Why the config still says `domain/**`
+
+Because extending it now would mean lowering the floor, and that number has only
+ever moved up.
+
+Measured across every application layer: **88.35% of 1,614 mutants, 188
+survivors.** Several files are at 100%, and `column-mapping.ts` — which decides
+which spreadsheet column means what — is at **54%**, the weakest file in the
+codebase. That is a body of work, not a config change, and the gate should be
+widened once it is done rather than widened and then apologised for.
+
+The two adapters fixed here keep their tests either way. What they do not yet
+have is a gate watching them, and that is the next thing worth doing.
+
 #### The rule underneath all of it
 
 Every gap in this pass was a check that could not fail: an assertion inside a
@@ -2014,6 +2071,14 @@ conflict still throws: a dropped connection must never be reported as
 
   **The axe failure remains unexplained and should not be assumed to be the same
   cause.** It has not recurred, which is not the same as being gone.
+- **The mutation gate only measures `domain/`, and the application layer is at
+  88%.** Pointing it further found two adapters with no unit tests at all;
+  `http-image-fetcher.ts` and `r2-image-repository.ts` are fixed and at 97% and
+  96%, `xlsx-workbook-reader.ts` is still at 0%. Across every application layer
+  it is **88.35% of 1,614 mutants, 188 survivors**, worst of them
+  `column-mapping.ts` at 54% — the code that decides which spreadsheet column
+  means what. Widening `mutate` is earned by closing those first; doing it now
+  would mean lowering a floor that has only ever moved up.
 - **28 mutants survive on the domain layer, and every one of them is now
   declared.** The score is 97.78% of 1,263 against a floor of 97, so it cannot
   regress; `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%.

@@ -135,6 +135,44 @@ describe('findById', () => {
     await expect(repository().findById('taz4tech', ID)).rejects.toThrow(/not an image/);
   });
 
+  it('trims the type when the space is before the semicolon', async () => {
+    // Headers normalises whitespace at the ends of a value, so a padded header
+    // never reaches the trim. This one does.
+    stub(
+      new Response(BYTES, { status: 200, headers: { 'content-type': 'image/png ; charset=x' } }),
+    );
+    await expect(repository().findById('taz4tech', ID)).resolves.toMatchObject({
+      contentType: 'image/png',
+    });
+  });
+
+  it('stamps the read with the clock when there is no Last-Modified', async () => {
+    // Without the header there is nothing to take the date from, so it falls
+    // back to now. Untested, this silently became new Date(null) — the epoch.
+    stub(new Response(BYTES, { status: 200, headers: { 'content-type': 'image/png' } }));
+    await expect(repository().findById('taz4tech', ID)).resolves.toMatchObject({ storedAt: NOW });
+  });
+
+  it('refuses an object the domain would not accept, rather than returning it', async () => {
+    // The bucket is writable by other things. An object stored under a key that
+    // is not a SHA-256 cannot be a StoredImage, and saying so is better than
+    // handing the storefront something the domain rejected.
+    stub(new Response(BYTES, { status: 200, headers: { 'content-type': 'image/png' } }));
+    await expect(repository().findById('taz4tech', 'not-a-hash')).rejects.toThrow(
+      /violates an invariant/,
+    );
+  });
+
+  it('uses a real clock when it is not given one, which is how production builds it', async () => {
+    // The composition root calls this with one argument. Every other test here
+    // injects a clock, so the default parameter was never once executed.
+    stub(new Response(BYTES, { status: 200, headers: { 'content-type': 'image/png' } }));
+    const found = await createR2ImageRepository(CONFIG).findById('taz4tech', ID);
+
+    expect(found?.storedAt).toBeInstanceOf(Date);
+    expect(Number.isNaN(found?.storedAt.getTime())).toBe(false);
+  });
+
   it('reads the type without its charset', async () => {
     stub(
       new Response(BYTES, {
