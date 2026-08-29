@@ -31,9 +31,23 @@ export type StoreSettings = {
   /**
    * VAT, in basis points (1100 = 11%). Integer to keep tax exact; see Money.
    *
+   * RECORDED, NOT APPLIED — and that is the honest state of it.
+   *
+   * Nothing reads this. Prices are typed VAT-inclusive, no total adds anything
+   * on top, and no page shows a tax line. It is stored because the rate is a
+   * real fact about where this shop trades, and because the moment registration
+   * is settled it is the input that everything else needs.
+   *
+   * There WAS a `vatRate` helper here whose only caller was its own test. It is
+   * gone: an exported function with no consumer reads as a wired-up feature to
+   * whoever finds it next, which is how a field nobody applies comes to look
+   * like one that is applied. The conversion is one line and comes back with
+   * something that calls it.
+   *
    * Lebanon's rate is 11% and registration is tied to an LBP 5bn threshold.
    * Advisory sources claim importers must register regardless of turnover, but
-   * that is not primary-sourced — treat this field as configurable, not settled.
+   * that is not primary-sourced and this is not a question a codebase can
+   * answer — it needs a Lebanese tax adviser.
    */
   readonly vatBasisPoints: number;
   /**
@@ -98,9 +112,6 @@ export const createStoreSettings = (
   }
   return ok({ ...input, name: input.name.trim() });
 };
-
-/** VAT as a multiplier for Money.applyRate — 1100 bp becomes 0.11. */
-export const vatRate = (settings: StoreSettings): number => settings.vatBasisPoints / 10_000;
 
 /** Law 81/2018 Art. 31: show seller identity only once there is one to show. */
 export const showsRegistryNumber = (settings: StoreSettings): boolean =>

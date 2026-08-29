@@ -171,7 +171,7 @@ export default async function AdminSettingsPage({ searchParams }: PageProps) {
           <Field
             id="vatPercent"
             label="VAT rate (%)"
-            hint="Prices already include VAT. This is the rate the storefront quotes — 11 is Lebanon's."
+            hint="Recorded, not applied. Prices are typed VAT-inclusive and nothing is added at checkout, so changing this does not change what anyone pays. Stored for when registration is settled — 11 is Lebanon's rate."
             invalid={error === 'vat'}
           >
             <input

@@ -6,7 +6,6 @@ import {
   deliverySpread,
   type StoreSettings,
   showsRegistryNumber,
-  vatRate,
 } from './store-settings';
 
 const valid: StoreSettings = {
@@ -77,14 +76,6 @@ describe('createStoreSettings', () => {
   it('accepts a well-formed E.164 number', () => {
     expect(createStoreSettings({ ...valid, contactPhone: '+96170123456' }).ok).toBe(true);
     expect(createStoreSettings({ ...valid, contactPhone: '+12025550123' }).ok).toBe(true);
-  });
-});
-
-describe('vatRate', () => {
-  it('converts basis points to the multiplier Money.applyRate expects', () => {
-    expect(vatRate({ ...valid, vatBasisPoints: 1100 })).toBeCloseTo(0.11, 10);
-    expect(vatRate({ ...valid, vatBasisPoints: 0 })).toBe(0);
-    expect(vatRate({ ...valid, vatBasisPoints: 10_000 })).toBe(1);
   });
 });
 
