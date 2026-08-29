@@ -338,6 +338,23 @@ export const QuickViewProvider = ({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [slug, setSlug] = useState<string | null>(null);
 
+  /*
+   * Marks the moment the triggers start intercepting clicks.
+   *
+   * Before hydration a trigger is a plain link and following it is the CORRECT
+   * outcome — that is the whole progressive-enhancement story, and there is
+   * deliberately no visible difference between "not upgraded yet" and
+   * "upgraded". Which leaves a test that clicks one no way to tell whether it
+   * is about to get a dialog or a navigation, and that raced: the e2e suite
+   * flaked three times over several weeks, landing on the product page with no
+   * dialog and no explanation.
+   *
+   * So the state is made observable rather than guessed at. Nothing renders
+   * differently; `data-ready` simply appears once React has attached handlers.
+   */
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
+
   const open = useCallback((next: string) => {
     setSlug(next);
     dialogRef.current?.showModal();
@@ -363,6 +380,7 @@ export const QuickViewProvider = ({
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: Escape is handled natively by <dialog> */}
       <dialog
         ref={dialogRef}
+        data-ready={ready ? '' : undefined}
         /*
           Named "Quick view: Anker Cable" rather than by the heading alone. A
           screen reader announces a dialog by its name on open, and "Anker Cable"
