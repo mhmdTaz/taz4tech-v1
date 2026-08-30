@@ -2441,10 +2441,12 @@ JavaScript involved.
 
   This entry used to say *every one has an argument*, and the arguments lived
   here, several hundred lines from the code. They live in
-  `scripts/check-static-mutants.mjs` now, one per survivor, and **`pnpm
-  test:mutation:static` replays all twenty-eight against the real suite and
-  fails if any behaves differently from its claim.** A survivor with nothing
-  said about it also fails. The number can go down; it cannot go up quietly.
+  `scripts/check-static-mutants.mjs` now — **forty-eight declared equivalent,
+  one per entry** — and `pnpm test:mutation:static` replays all fifty-five
+  against the real suite and fails if any behaves differently from its claim.
+  The other seven are static tables in `search.ts` that Stryker cannot test at
+  all, and the replay proves them caught. A survivor with nothing said about it
+  fails too. The number can go down; it cannot go up quietly.
 
   The four passes split completely differently from one another: the cart was a
   third real gaps, a third code worth deleting, a third equivalent; the order was
