@@ -32,19 +32,47 @@
  * would put the password in the log this exists to make readable.
  */
 
-import { createLogger } from '@platform/logger';
+import type { Logger } from '@platform/logger';
 import type { Instrumentation } from 'next';
 
 /*
- * Its own logger, not the container's.
+ * TWO RUNTIMES, AND THE LOGGER ONLY WORKS IN ONE
+ * ----------------------------------------------
+ * This file is compiled for the Node runtime AND for the Edge one, because
+ * `src/proxy.ts` exists — Next 16's name for middleware, which runs on Edge.
+ * The logger writes with `process.stdout`, which Edge does not have, so
+ * importing it at the top of this file put a Node API into the Edge bundle:
+ * a warning and a failed compile of the Edge instrumentation on every single
+ * request, which is how it was noticed.
  *
- * getContainer() connects to MongoDB, and the error being reported may BE that
- * the database is unreachable. An error reporter that needs the thing that
- * broke reports nothing at the moment it matters most.
+ * `process.env.NEXT_RUNTIME` is replaced with a literal per bundle, so the
+ * import below is dropped entirely from the Edge one rather than being loaded
+ * and failing. The type import is erased at compile time and costs nothing.
+ *
+ * WHAT THIS GIVES UP: an uncaught error inside `proxy.ts` is not logged here.
+ * That file is next-intl's locale routing and nothing else, and the alternative
+ * — a second, unredacted log shape written with `console` — is worse than the
+ * gap. It is a gap, and it is written down rather than implied.
  */
-const logger = createLogger({ level: 'error', base: { source: 'onRequestError' } });
+let logger: Logger | undefined;
 
-export const onRequestError: Instrumentation.onRequestError = (error, request, context) => {
+export const onRequestError: Instrumentation.onRequestError = async (error, request, context) => {
+  if (process.env.NEXT_RUNTIME !== 'nodejs') return;
+
+  /*
+   * Its own logger, not the container's.
+   *
+   * getContainer() connects to MongoDB, and the error being reported may BE that
+   * the database is unreachable. An error reporter that needs the thing that
+   * broke reports nothing at the moment it matters most.
+   *
+   * Built once and kept, so a burst of errors does not build one each time.
+   */
+  if (logger === undefined) {
+    const { createLogger } = await import('@platform/logger');
+    logger = createLogger({ level: 'error', base: { source: 'onRequestError' } });
+  }
+
   const cause = error instanceof Error ? error : undefined;
 
   logger.error('unhandled server error', {

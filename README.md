@@ -2463,6 +2463,26 @@ It builds **its own logger rather than taking the container's**, because
 MongoDB is unreachable. A reporter that needs the thing that broke reports
 nothing at the moment it matters most.
 
+**It loads that logger only in the Node runtime, and the reason is a bug this
+file caused.** `src/proxy.ts` exists — Next 16's name for middleware, which runs
+on Edge — so Next compiles `instrumentation.ts` for both runtimes. The logger
+writes with `process.stdout`, which Edge does not have, so importing it at the
+top of the file put a Node API into the Edge bundle: a warning and a failed
+compile of the Edge instrumentation printed on **every single request** in
+`pnpm dev`. A reporter reporting on itself instead of on the shop.
+
+The import now sits behind `process.env.NEXT_RUNTIME === 'nodejs'`, which is
+replaced with a literal per bundle, so it is dropped from the Edge one rather
+than loaded and failed. **What that gives up:** an uncaught error inside
+`proxy.ts` is no longer reported. That file is next-intl's locale routing and
+nothing else, and the alternative — a second, unredacted log shape written with
+`console` — is worse than the gap.
+
+`src/instrumentation.test.ts` pins both halves: one line of JSON on the server,
+and nothing at all on the edge. It also pins the thing the comments claimed and
+nothing checked — that a thrown Mongo error carrying a connection string as a
+property does not put the password into the log.
+
 **What is redacted, precisely:** the logger strips values by field NAME, which
 covers the structured fields and does not cover `reason` or `stack`. An
 exception that puts a phone number in its own message carries it into the log.
