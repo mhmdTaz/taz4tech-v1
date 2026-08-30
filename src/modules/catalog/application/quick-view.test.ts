@@ -110,6 +110,31 @@ describe('toQuickView', () => {
       expect(result.images[0]?.alt).toBe('كابل');
     });
 
+    it('carries only the images, not every media item', () => {
+      // Media holds videos too. Without the filter a video URL lands in the
+      // dialog's gallery and renders as a broken picture.
+      const result = view({
+        media: [
+          {
+            kind: 'video',
+            url: 'https://cdn.example/a.mp4',
+            alt: { en: 'A video' },
+            width: null,
+            height: null,
+          },
+          {
+            kind: 'image',
+            url: 'https://cdn.example/a.jpg',
+            alt: { en: 'A photo' },
+            width: null,
+            height: null,
+          },
+        ],
+      });
+
+      expect(result.images).toEqual([{ url: 'https://cdn.example/a.jpg', alt: 'A photo' }]);
+    });
+
     it('is empty for a product with no media', () => {
       expect(view().images).toEqual([]);
     });
@@ -145,6 +170,21 @@ describe('toQuickView', () => {
       });
 
       expect(result.defaultSku).toBe('S');
+    });
+
+    it('keeps the FIRST of two variants that cost the same', () => {
+      // Equal prices must not reorder the dialog: whichever the operator listed
+      // first is the colour and photograph the customer sees, and a tie broken
+      // the other way moves it for no reason anyone can see.
+      const result = view({
+        optionNames: ['Size'],
+        variants: [
+          variant({ sku: 'FIRST', options: [{ name: 'Size', value: 'Small' }], price: usd(1999) }),
+          variant({ sku: 'SECOND', options: [{ name: 'Size', value: 'Large' }], price: usd(1999) }),
+        ],
+      });
+
+      expect(result.defaultSku).toBe('FIRST');
     });
 
     it('reports prices as integer cents, never formatted', () => {

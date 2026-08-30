@@ -397,6 +397,25 @@ describe('a double-tapped checkout', () => {
     expect(result).toEqual({ ok: true, value: existing });
   });
 
+  it('does not treat a duplicate NUMBER as a duplicate checkout', async () => {
+    /*
+     * Two different failures from the same unique-index family. A duplicate
+     * checkout means "you already have this order" and the right answer is to
+     * hand it back; a duplicate number is the counter having gone wrong, and
+     * answering it with somebody else's order would be worse than an error.
+     */
+    const findByIdempotencyKey = vi.fn(async () => null);
+    const repo = repository({
+      save: vi.fn(async () => err({ tag: 'duplicate_number' as const, number: 'T4T-26-000041' })),
+      findByIdempotencyKey,
+    });
+
+    // It THROWS rather than returning a refusal: the counter and the collection
+    // disagreeing is a fault, not an outcome a customer should be shown.
+    await expect(placer({ repository: repo }).place(input())).rejects.toThrow(/duplicate_number/);
+    expect(findByIdempotencyKey).not.toHaveBeenCalled();
+  });
+
   it('gives back the stock the second attempt took', async () => {
     // The first attempt already took its own; leaving this one's taken would
     // double-count the sale.

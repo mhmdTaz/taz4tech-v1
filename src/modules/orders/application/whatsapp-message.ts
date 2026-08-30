@@ -52,8 +52,29 @@ export type WhatsAppOptions = {
  */
 export const MAX_LISTED_LINES = 12;
 
-const line = (parts: readonly string[]): string =>
+/**
+ * One block of lines, with anything absent left out.
+ *
+ * A label can be empty — a locale with a translation still missing — and a gap
+ * in the middle of a message reads as a mistake rather than as spacing.
+ */
+const section = (...parts: readonly string[]): string =>
   parts.filter((part) => part.length > 0).join('\n');
+
+/**
+ * The blocks, one blank line between them.
+ *
+ * Written as sections rather than as a single list with '' markers in it,
+ * because the filter above cannot tell a deliberate blank from an absent label
+ * and dropped both — every message went out as one unbroken paragraph, which on
+ * a phone is a wall of text.
+ *
+ * Mutation testing is what found it. The '' entries could be replaced with
+ * anything at all and no test noticed, because nothing was rendering them
+ * either way: a survivor that turned out to be a defect rather than a gap.
+ */
+const paragraphs = (...blocks: readonly string[]): string =>
+  blocks.filter((block) => block.length > 0).join('\n\n');
 
 export const whatsAppMessage = (order: Order, options: WhatsAppOptions): string => {
   const { labels, formatMoney, regionLabel } = options;
@@ -69,19 +90,18 @@ export const whatsAppMessage = (order: Order, options: WhatsAppOptions): string 
 
   if (remaining > 0) items.push(`• +${remaining}`);
 
-  return line([
-    labels.greeting.replace('{name}', order.customer.name),
-    labels.intro.replace('{number}', order.number),
-    '',
-    labels.itemsHeading,
-    ...items,
-    '',
-    `${labels.totalLabel}: ${formatMoney(order.total.cents)}`,
-    `${labels.deliveryLabel}: ${order.delivery.street}, ${order.delivery.city}, ${regionLabel}`,
-    '',
-    labels.codNote,
-    labels.closing,
-  ]);
+  return paragraphs(
+    section(
+      labels.greeting.replace('{name}', order.customer.name),
+      labels.intro.replace('{number}', order.number),
+    ),
+    section(labels.itemsHeading, ...items),
+    section(
+      `${labels.totalLabel}: ${formatMoney(order.total.cents)}`,
+      `${labels.deliveryLabel}: ${order.delivery.street}, ${order.delivery.city}, ${regionLabel}`,
+    ),
+    section(labels.codNote, labels.closing),
+  );
 };
 
 /**

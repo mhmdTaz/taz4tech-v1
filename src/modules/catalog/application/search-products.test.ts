@@ -40,6 +40,47 @@ describe('searchProducts', () => {
     expect(calls[0]?.storeId).toBe('taz4tech');
   });
 
+  it.each([1, MAX_PAGE_SIZE])('accepts a limit of exactly %s', async (limit) => {
+    // The ends of the range, which every rejection test above steps past. A `>`
+    // where `>=` belongs refuses a page somebody legitimately asked for.
+    const { repo, calls } = repository();
+    const result = await search(repo)({ limit });
+
+    expect(result.ok).toBe(true);
+    expect(calls[0]?.limit).toBe(limit);
+  });
+
+  it('sends no brand filter when none was asked for', async () => {
+    // The `?? []` fallback. Anything but an empty array here becomes a brand
+    // clause the customer never selected, and an empty result page.
+    const { repo, calls } = repository();
+    await search(repo)({});
+
+    expect(calls[0]?.filters.brands ?? []).toEqual([]);
+  });
+
+  it.each([
+    ['brands', (n: number) => ({ brands: Array.from({ length: n }, (_, i) => `B${i}`) })],
+    [
+      'the values of one option',
+      (n: number) => ({
+        options: [{ name: 'Colour', values: Array.from({ length: n }, (_, i) => `V${i}`) }],
+      }),
+    ],
+  ])('accepts exactly MAX_FILTER_VALUES %s', async (_what, build) => {
+    const { repo } = repository();
+    await expect(search(repo)(build(MAX_FILTER_VALUES))).resolves.toMatchObject({ ok: true });
+  });
+
+  it('accepts exactly MAX_FILTER_VALUES options', async () => {
+    const { repo } = repository();
+    const options = Array.from({ length: MAX_FILTER_VALUES }, (_, i) => ({
+      name: `O${i}`,
+      values: ['x'],
+    }));
+    await expect(search(repo)({ options })).resolves.toMatchObject({ ok: true });
+  });
+
   it.each([0, -1, 1.5, MAX_PAGE_SIZE + 1, Number.NaN])('rejects a limit of %s', async (limit) => {
     const { repo, calls } = repository();
     const result = await search(repo)({ limit });
@@ -188,6 +229,39 @@ describe('searchProducts', () => {
       const result = await search(repo)({ priceMinCents: -1 });
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.error.tag).toBe('invalid_price_range');
+    });
+
+    it('accepts a minimum of exactly zero, which is free rather than negative', async () => {
+      const { repo, calls } = repository();
+      await expect(search(repo)({ priceMinCents: 0 })).resolves.toMatchObject({ ok: true });
+      expect(calls[0]?.filters.priceMinCents).toBe(0);
+    });
+
+    it('accepts a range whose ends are equal, which selects one price', async () => {
+      const { repo } = repository();
+      await expect(
+        search(repo)({ priceMinCents: 5000, priceMaxCents: 5000 }),
+      ).resolves.toMatchObject({ ok: true });
+    });
+
+    it('accepts an ordinary range, so the comparison is exercised with two real numbers', async () => {
+      // Every other price test sets one bound or a broken pair. Without this,
+      // `min > max` could be inverted, or true always, unnoticed.
+      const { repo, calls } = repository();
+      await expect(
+        search(repo)({ priceMinCents: 1000, priceMaxCents: 5000 }),
+      ).resolves.toMatchObject({ ok: true });
+      expect(calls[0]?.filters).toMatchObject({ priceMinCents: 1000, priceMaxCents: 5000 });
+    });
+
+    it('reports the bounds it refused, filling an absent maximum with zero', async () => {
+      // The payload is what the admin screen shows back. `maxCents ?? 0` is the
+      // only reason an absent maximum reads as a number there at all.
+      const { repo } = repository();
+      await expect(search(repo)({ priceMinCents: -1 })).resolves.toMatchObject({
+        ok: false,
+        error: { tag: 'invalid_price_range', minCents: -1, maxCents: 0 },
+      });
     });
 
     it('ignores a non-finite bound', async () => {

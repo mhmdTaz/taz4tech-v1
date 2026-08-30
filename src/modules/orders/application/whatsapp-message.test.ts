@@ -64,6 +64,13 @@ describe('whatsAppMessage', () => {
     expect(message).toContain('T4T-26-000042');
   });
 
+  it('separates its sections with blank lines', () => {
+    // The message is written as sections with '' between them. Sent as one
+    // unbroken block it reads as a wall of text on a phone.
+    const message = whatsAppMessage(order(), options);
+    expect(message).toContain('\n\n');
+  });
+
   it('lists each line with its quantity and total', () => {
     const message = whatsAppMessage(order(), options);
     expect(message).toContain('• 2 × Anker Cable — $39.98');

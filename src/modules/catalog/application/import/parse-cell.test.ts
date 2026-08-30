@@ -56,6 +56,23 @@ describe('money cells', () => {
     if (result.ok) expect(result.value.cents).toBe(cents);
   });
 
+  it('strips a currency suffix with no space before it', () => {
+    // "1299.99usd" arrives from exports that concatenate rather than format.
+    expect(money('1299.99usd')).toMatchObject({ ok: true, value: { cents: 129999 } });
+  });
+
+  it('strips the suffix only at the END, so a currency prefix is not silently dropped', () => {
+    // "USD 1299" is a different cell from "1299 USD": one is a number with a
+    // label after it, the other is text this parser has no business guessing at.
+    expect(money('usd 1299').ok).toBe(false);
+  });
+
+  it('reports a blank cell as EMPTY rather than unparsable', () => {
+    // Different sentence to whoever reads the import report: a column nobody
+    // filled in is not the same problem as a price nobody can read.
+    expect(money('   ')).toMatchObject({ ok: false, error: { tag: 'required_cell_empty' } });
+  });
+
   it.each(['', 'free', 'N/A', '1.234', '12,34'])('rejects %p', (input) => {
     expect(money(input).ok).toBe(false);
   });
@@ -102,8 +119,24 @@ describe('date cells', () => {
   });
 
   it.each(['soon', '2026', '2026-13-01', 'Dec 1 2026'])('rejects %p', (input) => {
-    expect(date(input).ok).toBe(false);
+    expect(date(input)).toMatchObject({
+      ok: false,
+      error: { tag: 'unparsable_date', value: input },
+    });
   });
+
+  it.each(['valid until 03/04/2026', '03/04/2026 (approx)'])(
+    'reads %p as unparsable, not ambiguous',
+    (input) => {
+      /*
+       * The slashed pattern matches a WHOLE cell, not a date inside a sentence.
+       * Unanchored it would call this ambiguous — which tells the operator to
+       * rewrite a date that is not the problem, instead of that the cell is
+       * prose.
+       */
+      expect(date(input)).toMatchObject({ ok: false, error: { tag: 'unparsable_date' } });
+    },
+  );
 
   it('reports a blank cell as empty rather than unparsable', () => {
     // date() is also callable directly, not only through optionalDate.
@@ -127,7 +160,9 @@ describe('status cells', () => {
     ['true', 'active'],
     ['1', 'active'],
     ['draft', 'draft'],
+    ['unpublished', 'draft'],
     ['no', 'draft'],
+    ['false', 'draft'],
     ['0', 'draft'],
     ['archived', 'archived'],
     ['inactive', 'archived'],

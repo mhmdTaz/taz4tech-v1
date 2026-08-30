@@ -221,6 +221,15 @@ describe('getCollectionProducts', () => {
     expect(calls[0]?.cursor).toBe('abc');
   });
 
+  it.each([1, MAX_PAGE_SIZE])('accepts a limit of exactly %s', async (limit) => {
+    // The ends of the range every rejection test steps past.
+    const { repo, calls } = productRepo();
+    const result = await products(repo)(collection(), { limit });
+
+    expect(result.ok).toBe(true);
+    expect(calls[0]?.limit).toBe(limit);
+  });
+
   it.each([0, -1, 1.5, MAX_PAGE_SIZE + 1, Number.NaN])(
     'rejects a limit of %s without querying',
     async (limit) => {

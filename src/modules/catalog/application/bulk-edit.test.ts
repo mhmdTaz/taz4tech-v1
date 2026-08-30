@@ -120,6 +120,17 @@ describe('bulkEdit', () => {
       });
     });
 
+    it('accepts exactly the cap', async () => {
+      // The boundary the refusal test steps past. A `>=` here refuses a
+      // selection the operator is entitled to make.
+      const ids = Array.from({ length: MAX_BULK_SELECTION }, (_, i) => id(i + 1));
+      const { run } = editor([]);
+
+      expect(await run({ productIds: ids, operation: { tag: 'clear_offer' } })).toMatchObject({
+        ok: true,
+      });
+    });
+
     it('refuses more than the cap', async () => {
       const ids = Array.from({ length: MAX_BULK_SELECTION + 1 }, (_, i) => id(i + 1));
       const { run } = editor([]);
@@ -338,6 +349,32 @@ describe('toBulkEditReport', () => {
     if (!result.ok) throw new Error('expected a plan');
     return toBulkEditReport(result.value);
   };
+
+  it('counts the variants actually on offer, not the ones that are not', async () => {
+    // The number the confirmation screen shows before a clear_offer runs. The
+    // wrong side of the comparison reports "3 on offer" for a product with
+    // none, and the operator confirms a change they were told is bigger.
+    const mixed = product(1, {
+      optionNames: ['Length'],
+      variants: [
+        variant({ sku: 'S-1', options: [{ name: 'Length', value: '1m' }] }),
+        variant({
+          sku: 'S-2',
+          options: [{ name: 'Length', value: '2m' }],
+          compareAtPrice: usd(2999),
+          offerEndsAt: LATER,
+        }),
+      ],
+    });
+    const { run } = editor([mixed]);
+    const result = await run({
+      productIds: [id(1)],
+      operation: { tag: 'set_status', status: 'draft' },
+    });
+
+    if (!result.ok) throw new Error('expected a plan');
+    expect(toBulkEditReport(result.value).changes[0]?.before.onOfferVariants).toBe(1);
+  });
 
   it('shows before and after as plain data', async () => {
     const report = await reportFor([product(1)], [id(1)]);

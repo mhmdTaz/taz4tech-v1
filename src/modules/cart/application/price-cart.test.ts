@@ -74,6 +74,9 @@ describe('an empty cart', () => {
     expect(result.subtotalCents).toBe(0);
     expect(result.totalItems).toBe(0);
     expect(result.hasProblems).toBe(false);
+    // The arrays too. A page renders these, and "no lines" has to mean none.
+    expect(result.lines).toEqual([]);
+    expect(result.removed).toEqual([]);
     expect(products).not.toHaveBeenCalled();
     expect(stock).not.toHaveBeenCalled();
   });
@@ -154,6 +157,61 @@ describe('pricing', () => {
   it('has no image url for a product with no media', async () => {
     const line = (await price(oneProduct)(cart(['SKU-1', 1]), 'en')).lines[0];
     expect(line?.imageUrl).toBeNull();
+    // And no alt text either: a cart thumbnail with no image needs no label.
+    expect(line?.imageAlt).toBe('');
+  });
+
+  it('takes the first IMAGE, not the first media item', async () => {
+    // Media holds videos too. Taking whatever comes first puts a video URL in
+    // an <img> on the cart page, which renders as a broken thumbnail.
+    const withVideo = new Map([
+      [
+        'SKU-1',
+        product('a', {
+          media: [
+            {
+              kind: 'video',
+              url: '/v.mp4',
+              alt: englishOnly('A video'),
+              width: null,
+              height: null,
+            },
+            {
+              kind: 'image',
+              url: '/p.png',
+              alt: englishOnly('A photo'),
+              width: null,
+              height: null,
+            },
+          ],
+        }),
+      ],
+    ]);
+    const line = (await price(withVideo)(cart(['SKU-1', 1]), 'en')).lines[0];
+
+    expect(line?.imageUrl).toBe('/p.png');
+    expect(line?.imageAlt).toBe('A photo');
+  });
+
+  it('prices the variant the customer chose, not the first or the cheapest', async () => {
+    /*
+     * The line that decides what somebody is charged. A product with two
+     * variants, a cart naming the DEARER one: take the first variant instead,
+     * or fall back to the cheapest, and the customer is quoted a price they did
+     * not pick — undercharged here, which is the direction nobody reports.
+     */
+    const twoVariants = new Map([
+      [
+        'SKU-BIG',
+        product('a', {
+          variants: [variant('SKU-SMALL'), variant('SKU-BIG', { price: usd(4999) })],
+        }),
+      ],
+    ]);
+    const line = (await price(twoVariants)(cart(['SKU-BIG', 2]), 'en')).lines[0];
+
+    expect(line?.unitPriceCents).toBe(4999);
+    expect(line?.lineTotalCents).toBe(9998);
   });
 
   it('falls back to the cheapest variant if a SKU does not belong to its product', async () => {
@@ -281,6 +339,42 @@ describe('stock', () => {
 
     // Read once, written never — the port has no way to write at all.
     expect(stock).toHaveBeenCalledOnce();
+  });
+});
+
+describe('hasProblems', () => {
+  /*
+   * The flag the cart page uses to decide whether to show a warning and whether
+   * checkout is safe to offer. Asserted false only for an EMPTY cart until now,
+   * which is the one case where every way of computing it agrees.
+   */
+  it('is false for a full cart with nothing wrong', async () => {
+    const products = new Map([['SKU-1', product('a')]]);
+    const result = await price(products, new Map([['SKU-1', level('SKU-1')]]))(
+      cart(['SKU-1', 2]),
+      'en',
+    );
+
+    expect(result.lines).toHaveLength(1);
+    expect(result.hasProblems).toBe(false);
+  });
+
+  it('is true when only ONE of several lines has a problem', async () => {
+    // Some, not every. Computed the other way round a cart is only "in trouble"
+    // when every line is, so the one item that has run out is offered for
+    // checkout alongside the ones that have not.
+    const products = new Map([
+      ['SKU-1', product('a')],
+      ['SKU-2', product('b', { variants: [variant('SKU-2')] })],
+    ]);
+    const levels = new Map([
+      ['SKU-1', level('SKU-1', { onHand: 10 })],
+      ['SKU-2', level('SKU-2', { onHand: 0 })],
+    ]);
+    const result = await price(products, levels)(cart(['SKU-1', 1], ['SKU-2', 1]), 'en');
+
+    expect(result.lines.filter((line) => line.problem !== null)).toHaveLength(1);
+    expect(result.hasProblems).toBe(true);
   });
 });
 
