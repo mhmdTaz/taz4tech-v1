@@ -57,11 +57,17 @@ const options: WhatsAppOptions = {
 };
 
 describe('whatsAppMessage', () => {
-  it('greets the customer by name and names the order', async () => {
-    const message = whatsAppMessage(order(), options);
-
-    expect(message).toContain('Hello Rana K,');
-    expect(message).toContain('T4T-26-000042');
+  it('greets the customer by name and names the order', () => {
+    /*
+     * Both lines, in one assertion, with the newline between them. Checked
+     * separately, `toContain('T4T-26-000042')` passes just as happily when the
+     * number has been pasted at the front of the sentence instead of into the
+     * placeholder, and `toContain('Hello Rana K,')` passes when the greeting and
+     * the sentence have been run together into one line.
+     */
+    expect(whatsAppMessage(order(), options)).toContain(
+      'Hello Rana K,\nThis is Taz4Tech about your order T4T-26-000042.',
+    );
   });
 
   it('separates its sections with blank lines', () => {
@@ -134,6 +140,19 @@ describe('whatsAppMessage', () => {
     });
 
     expect(message.endsWith('\n')).toBe(false);
+    expect(message).not.toContain('\n\n\n');
+  });
+
+  it('drops a section whose every label is empty, rather than trailing blank lines', () => {
+    // A locale part-way through translation leaves a WHOLE block empty, not one
+    // line of it. Emptying a single label still leaves its section with content,
+    // so it never exercises the case the block filter exists for.
+    const message = whatsAppMessage(order(), {
+      ...options,
+      labels: { ...options.labels, codNote: '', closing: '' },
+    });
+
+    expect(message.endsWith('Beirut')).toBe(true);
     expect(message).not.toContain('\n\n\n');
   });
 });

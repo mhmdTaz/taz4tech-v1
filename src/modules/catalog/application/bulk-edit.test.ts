@@ -94,8 +94,12 @@ describe('bulkEdit', () => {
       commit: true,
     });
 
-    if (!result.ok) return;
+    if (!result.ok) throw new Error('expected a plan');
     expect(result.value.written).toBe(1);
+    // The flag the confirmation screen reads to decide between "this is what
+    // would happen" and "this has happened". A preview that claims to have
+    // committed, or a commit that claims not to have, is the same lie either way.
+    expect(result.value.committed).toBe(true);
     expect(saved.map((p) => p.status)).toEqual(['draft']);
   });
 
@@ -106,7 +110,7 @@ describe('bulkEdit', () => {
       operation: { tag: 'scale_price', basisPoints: 10_500 },
     });
 
-    if (!result.ok) return;
+    if (!result.ok) throw new Error('expected a plan');
     expect(result.value.changes[0]?.before.variants[0]?.price.cents).toBe(1999);
     expect(result.value.changes[0]?.after.variants[0]?.price.cents).toBe(2099);
   });
@@ -351,9 +355,11 @@ describe('toBulkEditReport', () => {
   };
 
   it('counts the variants actually on offer, not the ones that are not', async () => {
-    // The number the confirmation screen shows before a clear_offer runs. The
-    // wrong side of the comparison reports "3 on offer" for a product with
-    // none, and the operator confirms a change they were told is bigger.
+    // The number the confirmation screen shows before a clear_offer runs. Three
+    // variants and ONE offer, because with one of each the count is the same on
+    // either side of the comparison and the test cannot tell them apart — the
+    // wrong side would report two, and the operator confirms a change they were
+    // told is bigger than it is.
     const mixed = product(1, {
       optionNames: ['Length'],
       variants: [
@@ -364,6 +370,7 @@ describe('toBulkEditReport', () => {
           compareAtPrice: usd(2999),
           offerEndsAt: LATER,
         }),
+        variant({ sku: 'S-3', options: [{ name: 'Length', value: '3m' }] }),
       ],
     });
     const { run } = editor([mixed]);

@@ -25,13 +25,18 @@ const HEADERS = [
   'Offer Ends At',
 ];
 
-const plan = (rows: string[][], existing: Product[] = [], headers: string[] = HEADERS) => {
+const plan = (
+  rows: string[][],
+  existing: Product[] = [],
+  headers: string[] = HEADERS,
+  now: Date = NOW,
+) => {
   idCounter = 0;
   return planImport({
     rows: [headers, ...rows],
     mapping: detectMapping(headers),
     storeId: 'taz4tech',
-    now: NOW,
+    now,
     existingBySlug: new Map(existing.map((product) => [product.slug, product])),
     ownerSlugBySku: new Map(),
     nextId,
@@ -353,12 +358,41 @@ describe('planImport', () => {
        */
       const result = plan([['A-1', 'Anker Cable', '19.00', '', '', '', '', '25.00', '2026-01-01']]);
 
-      const problem = result.rowProblems.find((p) => p.field === 'offerEndsAt');
-      expect(problem?.problem.tag).toBe('date_already_past');
-      expect(problem?.row).toBe(2);
+      // Asserted whole, value included: the date the operator typed is what
+      // makes the message actionable, and it is read back out of the cell by name.
+      expect(result.rowProblems).toEqual([
+        {
+          row: 2,
+          field: 'offerEndsAt',
+          problem: { tag: 'date_already_past', value: '2026-01-01' },
+        },
+      ]);
 
       // Reported, not rejected: the product still arrives, without the offer.
       expect(result.products).toHaveLength(1);
+      expect(result.products[0]?.product.variants[0]?.compareAtPrice).toBeNull();
+    });
+
+    it('reports an offer that ends at EXACTLY the moment asked about', () => {
+      /*
+       * A date cell carries no time, so it lands on midnight UTC — and an offer
+       * that ends at midnight is over at midnight. `isOnOffer` wants strictly
+       * later, so the domain clears this one; reported at the boundary or not at
+       * all is the difference between the operator seeing why the discount
+       * disappeared and watching it vanish.
+       */
+      const midnight = new Date('2026-08-27T00:00:00Z');
+      const result = plan(
+        [['A-1', 'Anker Cable', '19.00', '', '', '', '', '25.00', '2026-08-27']],
+        [],
+        HEADERS,
+        midnight,
+      );
+
+      expect(result.rowProblems[0]?.problem).toEqual({
+        tag: 'date_already_past',
+        value: '2026-08-27',
+      });
       expect(result.products[0]?.product.variants[0]?.compareAtPrice).toBeNull();
     });
 
@@ -402,6 +436,9 @@ describe('planImport', () => {
       expect(result.products).toEqual([]);
       expect(result.productProblems[0]?.rows).toEqual([2, 3]);
       expect(result.productProblems[0]?.reason.tag).toBe('variant_options_mismatch');
+      // Both rows are gone, and the summary has to say so. Counting only the
+      // row-level problems would report nothing rejected while nothing imported.
+      expect(result.summary.rowsRejected).toBe(2);
     });
 
     it('stops before parsing anything when a required column is unmapped', () => {
@@ -435,6 +472,21 @@ describe('planImport', () => {
       expect(result.summary.products).toBe(2);
       expect(result.summary.toCreate).toBe(2);
       expect(result.summary.rowsRejected).toBe(1);
+    });
+
+    it('counts each rejected row once, and every one of them', () => {
+      // Two bad rows, and the count has to be two. Every other case here rejects
+      // exactly one row, which is the count a summary that had lost the row
+      // numbers altogether would also report.
+      const result = plan([
+        ['A-1', 'Anker Cable', '', '', '', '', '', '', ''],
+        ['B-1', 'Logitech Mouse', '29.00', '', '', '', '', '', ''],
+        ['C-1', 'Dell Monitor', '', '', '', '', '', '', ''],
+      ]);
+
+      expect(result.rowProblems.map((problem) => problem.row)).toEqual([2, 4]);
+      expect(result.summary.rowsRejected).toBe(2);
+      expect(result.summary.products).toBe(1);
     });
 
     it('produces products that already satisfy every domain invariant', () => {

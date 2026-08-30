@@ -832,21 +832,121 @@ rendering them either way. The fix is `section()` for lines and `paragraphs()`
 for blocks, so an absent label and an intended blank are no longer the same
 thing.
 
-#### What is left, and why the gate has not widened
+#### What was left: forty-five survivors across fifteen files
 
-Forty-five survivors across fifteen files, none above seven. A large share are
-the shapes already argued elsewhere in this file: `x !== undefined` guards the
-type checker demands and JavaScript does not need, `?? []` fallbacks whose
-contents no caller can distinguish, and early returns made redundant by a check
-a few lines below them — `problemFor`'s out-of-stock branch is one, equivalent
-because `createStockLevel` refuses a negative count, so an out-of-stock level
-always has exactly zero on hand and both paths report the same thing.
+None above seven, and a large share the shapes already argued elsewhere in this
+file: `x !== undefined` guards the type checker demands and JavaScript does not
+need, `?? []` fallbacks whose contents no caller can distinguish, and early
+returns made redundant by a check a few lines below them — `problemFor`'s
+out-of-stock branch is one, equivalent because `createStockLevel` refuses a
+negative count, so an out-of-stock level always has exactly zero on hand and
+both paths report the same thing.
 
-They are not declared yet, and the gate still measures `domain/**` plus three
-named files. Declaring a survivor means arguing it one at a time, and forty-five
-arguments written in one sitting is how a registry fills up with sentences
-nobody checked. That is the next piece, and it is what earns these files their
-place in the gate.
+That was the reading from a distance. Up close, it was wrong about half of them.
+
+#### Read one at a time, twenty-three of them were killable
+
+Which is the whole reason for reading them one at a time. **Twenty-three of the
+forty-five could be killed**, and one of those was a second defect.
+
+**The idempotency key was trimmed in one of the two places that use it.** The
+order is written under `input.idempotencyKey.trim()`, so the unique index holds
+the trimmed key; the recovery read after a duplicate asked for the raw one. A
+double-tapped checkout whose key arrived with a space around it would be refused
+by the index and then fail to find the order it had collided with — and that
+path does not return an error, it **throws**. The customer gets an exception
+instead of the order they already placed. Trimmed once now, at the door, beside
+the phone number and the region, and passed on as a value like both of those.
+
+**A test named for the thing it could not check.** `onOfferVariants` counts the
+variants carrying a was-price, and two tests asserted it — one of them named
+*counts the variants actually on offer, not the ones that are not*, with a
+comment arguing precisely the failure the mutation performs. Both used a product
+with one variant on offer and one not, where **both sides of the comparison
+answer 1**. Three variants and one offer, and the wrong side answers 2.
+
+The rest, briefly:
+
+- **Every breadcrumb was asserted except its type.** `@type: 'BreadcrumbList'`
+  was checked; `@type: 'ListItem'` on each entry was not. Google drops an
+  untyped list whole, and the page source looks correct while it happens.
+- **A data URI that mentions `http`.** `isForeign` decides what gets fetched,
+  anchored at the start of the string. Unanchored, an inline SVG matches —
+  every SVG carries `xmlns="http://www.w3.org/2000/svg"` — and the importer
+  hands a `data:` URL to an HTTP fetcher. The existing test used a base64 PNG,
+  which contains no scheme to trip over.
+- **A summary that had lost the row numbers.** `rowsRejected` is `Set.size`, and
+  every test rejected exactly one row — the count a summary that had thrown the
+  numbers away would also report. It also never counted the rows a
+  product-level problem took down: two rows with a mismatched option matrix, and
+  the summary said nothing was rejected while nothing imported.
+- **An offer ending at exactly the moment asked about.** `<=` against `<`, on
+  the boundary. A date cell carries no time, so it lands on midnight, and an
+  offer that ends at midnight is over — `isOnOffer` wants strictly later. Not
+  reporting it is the operator watching a discount vanish with no row named.
+- **`translatedInto` never mentioned French.** The shared headers in that test
+  file carry English and Arabic, so the third locale could be dropped from the
+  list the "needs translating" nudge is built from and nothing noticed.
+- **A dry run's three empty arrays.** `failures`, `stockFailures` and
+  `imageFailures` are what the preview screen counts to decide whether to show a
+  problems panel; a preview that invented one would send the operator to a row
+  that is fine.
+- **`committed: true`.** Asserted `false` for a preview and never `true` for a
+  commit — so the flag could be stuck on "this is what would happen" over a
+  write that had already happened.
+- **A refusal with no reason in it.** When the domain refuses an order, the
+  application returns `{ tag: 'invalid', reason }`. One test exercised that path
+  for the stock give-back and never looked at what came back, so the reason
+  could be dropped entirely: "something was wrong with your order" on a checkout
+  form, and no way to tell which field.
+- **An empty `$in`.** Two bulk lookups guard against querying for nothing; only
+  the first was asserted.
+- **`status: undefined` instead of no status.** The key is spread in
+  conditionally in two use cases, and both asserted `toBeUndefined()`, which
+  cannot tell an absent key from a present one holding undefined. At the far end
+  those differ: undefined in a Mongo filter is a filter for null, which matches
+  no document. The cursor beside it was already asserted with `Object.hasOwn`;
+  the status now is too.
+
+#### And the twenty-two that stay
+
+They are in `EQUIVALENT` now, each with the argument that no test can reach it,
+and each replayed against the real suite on every run. Two shapes cover most:
+
+- **A guard the type checker needs and the runtime does not.** `quick-view`'s
+  `compareAtPrice === null || offerEndsAt === null` is refused a line later by
+  `!isOnOffer(...)`, which requires both; it is there so TypeScript can see
+  `.cents` and `.toISOString()` as safe. `values[index]` with the `undefined`
+  check removed is `values[undefined]`, which is undefined anyway.
+- **A normalisation performed twice.** `place-order` turns whitespace-only notes
+  into null, and `createOrder` turns `blank(notes)` into null again before an
+  Order exists. Both stay — the layer assembling the input should not lean on
+  the domain tidying up after it — and nothing outside can tell.
+
+One entry is declared **`replay: 'caught'`** rather than equivalent, and it is
+the second of its kind: `minCents !== undefined && maxCents !== undefined`
+mutated to `||` is equivalent as Stryker RAN it, because reaching the comparison
+still needs both bounds — and not equivalent as the report PRINTS it, because
+`&&` binds tighter than `||`, so the splice refuses every search carrying a
+minimum price. `collection.ts` has the same disagreement on the same shape of
+expression. Both tools are right about different mutations, and the registry
+says which is which rather than letting the mismatch read as a fault in either.
+
+#### The gate now covers the whole application layer
+
+`mutate` is `src/modules/*/domain/**`, `src/modules/*/application/**` and the two
+media adapters — the explicit file list is gone, because there is nothing left in
+those two layers to list around.
+
+**98.18% of 3,026 mutants, against a floor of 97.** Fifty-five that no test
+kills: **forty-eight declared equivalent**, each with its argument and each
+replayed against the real suite on every run, and seven Stryker could not test at
+all — the static tables in `search.ts` — which the replay applies for real and
+proves caught.
+
+What is still outside is what the runner cannot execute: the Mongo adapters,
+whose tests are integration-only, and `xlsx-workbook-reader.ts`, which has no
+unit tests at all.
 
 #### The rule underneath all of it
 
@@ -2329,18 +2429,12 @@ JavaScript involved.
 
   **The axe failure remains unexplained and should not be assumed to be the same
   cause.** It has not recurred, which is not the same as being gone.
-- **The application layer is at 96.9%, and still outside the gate.** It was at
-  88.35% with 188 survivors when first measured; 112 of those sat outside
-  `column-mapping.ts` and **45 remain**, spread across fifteen files with none
-  above seven. Most are shapes already argued here — type-required `!==
-  undefined` guards, `?? []` fallbacks nothing can distinguish, early returns a
-  later check makes redundant.
-
-  They are not declared yet, and that is what gates them. Forty-five equivalence
-  arguments written in one sitting is how a registry fills with sentences nobody
-  checked, so each is worth its own reading first. `xlsx-workbook-reader.ts`
-  still has no unit tests at all, and the Mongo adapters cannot be measured by
-  this runner because their tests are integration-only.
+- **Two layers are measured; the third cannot be.** The domain and the
+  application layer are both inside the mutation gate now. The Mongo adapters
+  are not, and not for want of trying: their tests are integration-only, so the
+  mutation runner cannot execute them at all. `xlsx-workbook-reader.ts` has no
+  unit tests of any kind — it is the one file in `src/modules` with nothing
+  said about it.
 - **33 mutants survive across everything measured, and every one is declared.**
   The score is 97.90% of 1,573 against a floor of 97, so it cannot regress;
   `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%.

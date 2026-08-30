@@ -181,6 +181,131 @@ const EQUIVALENT = [
     replay: 'survives',
     why: 'The same optional chain as the fetcher, on the same expression shape.',
   },
+
+  /*
+   * The application layer, from here down.
+   *
+   * Written after the layer went from 88% to 97%, and every one of these was
+   * looked at on its own before it was written down. Two shapes account for
+   * most of them: a guard the type checker needs and the runtime does not, and
+   * a check a later line makes redundant. Neither is dead code — each says
+   * plainly what the function will not do — but neither can be observed from
+   * outside, which is what makes them entries here rather than gaps.
+   */
+  {
+    file: 'src/modules/cart/application/price-cart.ts',
+    replacement: 'false',
+    count: 2,
+    replay: 'survives',
+    why: 'Two guards, each made redundant by the line under it. `compareAtPrice === null` narrows for TypeScript: without it, isOnOffer still answers false for a variant with no was-price, so the ternary returns null and `.cents` is never read off null. The out-of-stock early return builds `{ not_enough, available: 0 }`, and out_of_stock means a tracked level at zero — createStockLevel refuses a negative count and the repository parses onHand as z.number().int().min(0) — so countToShow gives 0, `0 >= quantity` is false for every cart line (readLine drops q < 1), and the fall-through builds that same object.',
+  },
+  {
+    file: 'src/modules/cart/application/price-cart.ts',
+    replacement: '""',
+    count: 1,
+    replay: 'survives',
+    why: 'The out-of-stock guard from the other side: no availability equals "", so the branch is skipped and the fall-through reports the same available: 0.',
+  },
+  {
+    file: 'src/modules/catalog/application/import/parse-cell.ts',
+    replacement: '/(\\d{4})-(\\d{2})-(\\d{2})$/',
+    count: 1,
+    replay: 'survives',
+    why: 'Dropping the leading anchor lets "x2026-01-02" reach the parser, and the line below compares parsed.toISOString().slice(0, 10) against the RAW cell — ten characters against eleven — so it comes back unparsable_date with the same value either way. That round trip was written to catch 2026-02-31 rolling into March; it makes both anchors unobservable as a side effect.',
+  },
+  {
+    file: 'src/modules/catalog/application/import/parse-cell.ts',
+    replacement: '/^(\\d{4})-(\\d{2})-(\\d{2})/',
+    count: 1,
+    replay: 'survives',
+    why: 'The trailing anchor, refused by the same round trip: a ten-character slice cannot equal a longer string, so "2026-01-02 (approx)" is unparsable_date with or without the $.',
+  },
+  {
+    file: 'src/modules/catalog/application/import/plan-import.ts',
+    replacement: 'false',
+    count: 1,
+    replay: 'survives',
+    why: '`index === undefined ? undefined : values[index]` without its guard is `values[undefined]`, which JavaScript evaluates to undefined. The guard is there for noUncheckedIndexedAccess, which types the access as possibly absent.',
+  },
+  {
+    file: 'src/modules/catalog/application/import/plan-import.ts',
+    replacement: 'row.image.url',
+    count: 1,
+    replay: 'survives',
+    why: 'The optional chain sits inside `row.image !== null && ...`, so the access is already safe when it runs. TypeScript cannot carry that narrowing into the some() callback, which is the whole reason the ?. is written.',
+  },
+  {
+    file: 'src/modules/catalog/application/import-products.ts',
+    replacement: '["Stryker was here"]',
+    count: 1,
+    replay: 'survives',
+    why: 'The [] is only evaluated when slugs.length is 0, which means the provisional plan produced neither a product nor a product problem. It becomes existingBySlug, and the only read of that map is get(first.slug), once per planned product — of which there are none. The twin on the next line is NOT equivalent and Stryker kills it: skuOwners is iterated for owner.variants, which throws on a string.',
+  },
+  {
+    file: 'src/modules/catalog/application/quick-view.ts',
+    replacement: 'false',
+    count: 3,
+    replay: 'survives',
+    why: 'The narrowing check and each half of it. `if (!isOnOffer(variant, now)) return null` on the next line refuses everything this one does, because isOnOffer requires both a was-price and an end date. The guard exists so TypeScript can see compareAtPrice.cents and offerEndsAt.toISOString() as safe.',
+  },
+  {
+    file: 'src/modules/catalog/application/quick-view.ts',
+    replacement: 'compareAtPrice === null && offerEndsAt === null',
+    count: 1,
+    replay: 'survives',
+    why: 'Swapping || for && narrows what returns early, and isOnOffer returns null a line later for every case that stops returning early here.',
+  },
+  {
+    file: 'src/modules/catalog/application/search-products.ts',
+    replacement: 'false',
+    count: 1,
+    replay: 'survives',
+    why: 'In `value === undefined || !Number.isFinite(value)` the left disjunct is subsumed by the right: Number.isFinite(undefined) is false, so both spellings return undefined for an absent number.',
+  },
+  {
+    file: 'src/modules/catalog/application/search-products.ts',
+    replacement: '["Stryker was here"]',
+    count: 1,
+    replay: 'survives',
+    why: 'The `?? []` is only reached when no options were asked for, and the loop drops any entry whose values clean to nothing — cleanValues(undefined) is [...new Set(undefined)], which is empty rather than a throw. No fallback array can add a filter.',
+  },
+  {
+    file: 'src/modules/catalog/application/search-products.ts',
+    replacement: 'true',
+    count: 4,
+    replay: 'survives',
+    why: 'Four `!== undefined` guards whose comparison is false for undefined anyway: `undefined < 0` is false, and `minCents > maxCents` is false whenever either side is undefined. The same family as the five in collection.ts, one layer up.',
+  },
+  {
+    file: 'src/modules/catalog/application/search-products.ts',
+    replacement: 'minCents !== undefined || maxCents !== undefined',
+    count: 1,
+    // The second place the two tools disagree, and for exactly the reason they
+    // disagree in collection.ts — the same shape of expression, one layer up.
+    replay: 'caught',
+    why: 'Equivalent as Stryker ran it: `(minCents !== undefined || maxCents !== undefined) && minCents > maxCents` still needs both bounds before the comparison can be true. Not equivalent as the report PRINTS it, because && binds tighter — the splice reads `minCents !== undefined || (maxCents !== undefined && minCents > maxCents)`, which refuses every search carrying a minimum price. The replay catches it and Stryker did not, and both are right about different mutations.',
+  },
+  {
+    file: 'src/modules/orders/application/place-order.ts',
+    replacement: 'false',
+    count: 1,
+    replay: 'survives',
+    why: 'Whitespace-only notes, normalised twice. Without this check the spaces are passed on, and createOrder turns blank(notes) into null before an Order exists — so the order is identical. It stays because the layer assembling the input should not lean on the domain tidying up after it, but nothing outside can tell.',
+  },
+  {
+    file: 'src/modules/orders/application/place-order.ts',
+    replacement: 'input.notes',
+    count: 1,
+    replay: 'survives',
+    why: 'The same normalisation from the other side: testing the untrimmed length only changes the answer for notes that are all whitespace, and those are the ones createOrder turns into null anyway.',
+  },
+  {
+    file: 'src/modules/store/application/update-store-settings.ts',
+    replacement: '""',
+    count: 1,
+    replay: 'survives',
+    why: "hundredths returns Result<number, 'unparsable'> and neither caller reads the error VALUE — each checks .ok and builds its own tagged error carrying the input, and for a delivery fee the region as well. The string names a channel nobody listens on.",
+  },
 ];
 
 const entryFor = (file, mutant) =>
