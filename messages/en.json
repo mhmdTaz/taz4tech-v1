@@ -102,6 +102,12 @@
     "vatNote": "Prices include VAT where it applies. Cash on delivery across Lebanon.",
     "removedClear": "Clear them"
   },
+  "error": {
+    "title": "Something went wrong",
+    "body": "The page did not load. Nothing you did caused it, and no order was placed. Try again, or call us and we will sort it out.",
+    "retry": "Try again",
+    "home": "Back to the shop"
+  },
   "nav": {
     "products": "Products",
     "collections": "Collections",

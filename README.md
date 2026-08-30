@@ -115,6 +115,8 @@ through `parseFloat`, which would turn `"1.115"` into 111 cents instead of 112.
 | `pnpm delivery:price <amount>` | Sets one delivery price for all eight governorates. Local databases only unless `TAZ_SEED_TARGET` names the database |
 | `pnpm bundle:budget` | Fails if client JS crosses its ceiling |
 | `pnpm build:offline` | `pnpm build` with no database reachable, the way CI builds it |
+| `pnpm db:backup` | Dumps every collection to gzipped Extended JSON, then reads it back to check |
+| `pnpm db:restore <file>` | Dry-runs a restore; `--commit` into empty collections, `--replace` to empty them first |
 | `pnpm db:check` | Proves a connection string authenticates and can read, without printing it |
 | `pnpm seed` | Creates the store settings document if there is none, and otherwise leaves it alone |
 | `pnpm seed --reset` | Overwrites it with the defaults. Local databases only unless `TAZ_SEED_TARGET` names the database |
@@ -2094,8 +2096,136 @@ above it should know what 11000 means. Anything that is not a uniqueness
 conflict still throws: a dropped connection must never be reported as
 "397 of 400 imported".
 
+## Backups
+
+### First, the part only the Atlas console can answer
+
+**Atlas backs up paid clusters. It does not back up an M0.** Which tier this
+shop is on is not visible from a connection string — backup configuration lives
+in the control plane, not the data plane — so it cannot be checked from here or
+from any script in this repository.
+
+In the Atlas UI: *Database → the cluster → the tier badge beside its name*, and
+*Backup* in the cluster's own tabs. On a shared tier the Backup tab offers to
+upgrade rather than showing snapshots, which is the answer.
+
+If the answer is M0, **every order this shop has ever taken exists in exactly
+one place**, and that place is free-tier infrastructure with no restore point.
+
+### Second, the part that should be true either way
+
+```bash
+pnpm db:backup                    # ./backups/<db>-<stamp>.ndjson.gz
+pnpm db:restore <file>            # says what it would do
+pnpm db:restore <file> --commit   # into EMPTY collections
+```
+
+A cash business's orders should exist somewhere the vendor does not control,
+whatever the tier says.
+
+**Extended JSON, and that is the whole design.** `JSON.stringify` on a document
+from this database turns every `Date` into a string and every image into a bare
+base64 string with no type. Restored, the media collection is full of values Zod
+refuses to parse and every order has a `placedAt` that is no longer a date. It
+would look like a backup, weigh about the same as one, and be worthless in the
+only hour it is ever needed. EJSON round-trips both, so that is what is written.
+
+**It reads back what it wrote** before reporting success, and counts it against
+the live collections. A backup nobody has read is a hope.
+
+**The restore does nothing by default.** It is the one command here that can
+overwrite a shop's orders, and it gets run on the worst day somebody has had all
+month, so it prints what it found and stops. `--commit` refuses a collection
+that already holds data — restoring on top of live rows leaves a collection that
+is neither the old one nor the new one — and emptying first is a separate word,
+`--replace`. Non-local databases need `TAZ_SEED_TARGET` to name them, like the
+seeders.
+
+**Indexes are not in the file, deliberately.** `ensureIndexes` runs at startup
+and recreates every one, so they come from the application rather than from a
+copy that can fall behind it. Start the app once after a restore; until then the
+data is right and the unique constraints are not.
+
+#### Proven by restoring it
+
+Not argued — run. The e2e database was dumped, restored into an empty one, and
+compared:
+
+- **image bytes byte-identical**, and the id still equals their SHA-256, so
+  content-addressing survived;
+- `storedAt` and `placedAt` came back as `Date`, equal to the originals;
+- money came back as plain `number`, which is what `z.number()` needs;
+- and every document was then **read back through the application's own
+  repositories** — a 13,995-byte PNG through `createMongoImageRepository`, an
+  order through `createMongoOrderRepository`, five products through the search
+  path. Zod accepted all of it.
+
+That last step is the one that matters. A backup that restores bytes the domain
+refuses is not a backup, and nothing short of reading it through the real
+adapters would have said so.
+
+## When something breaks, somebody now finds out
+
+There was no error boundary anywhere in this app and no `instrumentation.ts`. An
+uncaught server error rendered Next's own page and wrote nothing structured —
+the shop could 500 at eleven at night and the first anyone knew was a phone
+call, if that.
+
+**`src/instrumentation.ts` catches every uncaught server error** — a page, a
+Server Action, a route handler — and writes one JSON line at level `error`
+through the existing logger, carrying the message, the stack, the path, the
+method and whether it was a render or an action. Render already collects stdout,
+so that is a greppable record without a vendor, an account or a monthly bill. If
+a dashboard is wanted later, that is the one function that changes.
+
+It builds **its own logger rather than taking the container's**, because
+`getContainer()` connects to MongoDB and the error being reported may be that
+MongoDB is unreachable. A reporter that needs the thing that broke reports
+nothing at the moment it matters most.
+
+**What is redacted, precisely:** the logger strips values by field NAME, which
+covers the structured fields and does not cover `reason` or `stack`. An
+exception that puts a phone number in its own message carries it into the log.
+Worth stating rather than implying, because "it goes through the redacting
+logger" reads like a guarantee. The error object is deliberately never
+serialised whole — a thrown Mongo error carries the connection string as a
+property.
+
+### And the customer sees a shop, not a stack
+
+Two boundaries, because they fail differently.
+
+`src/app/[locale]/error.tsx` catches a storefront page and sits **inside** the
+locale layout, so the header, the footer and the customer's own language all
+still work and they can carry on shopping. It never shows the error: a stack
+trace tells a customer nothing they can use and tells everyone else the shape of
+the software.
+
+`src/app/global-error.tsx` catches the root layout itself — which here means the
+footer's database read — and replaces the whole document, so it has no header,
+no fonts and no translations. **It says the same thing in all three languages at
+once**, because the locale lives in the segment below it and guessing English
+would leave most of this shop's customers reading a page they cannot, on the one
+screen whose job is to say the shop still exists and give them a number to ring.
+That number is hard-coded there, alone in this codebase, precisely because
+reading it from settings is what failed.
+
+Both were verified by throwing on purpose: a route handler that throws produced
+the log line above, and a storefront page that throws rendered the Arabic error
+page — server-side, with the navigation intact — under `curl`, with no
+JavaScript involved.
+
 ## Open decisions
 
+- **Is Atlas backing this cluster up?** Not answerable from here — backup
+  configuration is control plane, not data plane. If the cluster is an M0 there
+  are no snapshots and no restore point, and every order the shop has taken
+  exists in exactly one place. `pnpm db:backup` gives a copy that does not
+  depend on the answer, but running it is manual until something schedules it.
+- **Nothing alerts.** Server errors are now one structured line each in the
+  Render log, which is a record rather than a notification: it still takes
+  somebody looking. A log drain or an uptime check on `/api/health` would close
+  that, and both are account-level decisions rather than code.
 - **VAT registration.** 11% is recorded and applied to nothing — the field says
   so on the screen now, and the code that converted it is gone rather than
   sitting there looking wired up. Whether this store must register depends on
