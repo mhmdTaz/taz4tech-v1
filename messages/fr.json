@@ -102,6 +102,12 @@
     "vatNote": "Prix TTC le cas échéant. Paiement à la livraison partout au Liban.",
     "removedClear": "Les retirer"
   },
+  "error": {
+    "title": "Un problème est survenu",
+    "body": "La page ne s'est pas chargée. Vous n'y êtes pour rien, et aucune commande n'a été enregistrée. Réessayez, ou appelez-nous et nous réglerons cela.",
+    "retry": "Réessayer",
+    "home": "Retour à la boutique"
+  },
   "nav": {
     "products": "Produits",
     "collections": "Collections",

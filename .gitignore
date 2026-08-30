@@ -27,5 +27,6 @@ Thumbs.db
 
 .dependency-cruiser-cache
 reports/
+backups/
 stryker-report/
 .stryker-tmp/
