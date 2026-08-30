@@ -948,6 +948,118 @@ What is still outside is what the runner cannot execute: the Mongo adapters,
 whose tests are integration-only, and `xlsx-workbook-reader.ts`, which has no
 unit tests at all.
 
+### The one file with nothing said about it
+
+`xlsx-workbook-reader.ts` is sixty lines and it had no tests of any kind. It is
+also the only file in the importer that knows what a file format is: every
+supplier sheet this shop will ever receive arrives as bytes and leaves as
+`string[][]` through this one function.
+
+It has eighteen tests now. Writing them found a defect that would have shifted
+every date in every import by one day.
+
+#### Every date, one day early, west of Greenwich
+
+The reader turned a spreadsheet date cell into `YYYY-MM-DD` with
+`getFullYear`, `getMonth` and `getDate` — **local** getters. The library hands
+back a `Date` at UTC midnight of the day in the cell, which is the same instant
+whatever machine opens the file. Read locally, that instant is the previous day
+anywhere the offset is negative.
+
+An import run from anywhere in the Americas would have dated every row a day
+early. On `offerEndsAt` that is not cosmetic: a promotion ending today arrives
+already expired, the domain clears the offer, and the importer reports the row
+as a date typo the operator did not make. It is also the field
+`priceValidUntil` is built from — the one consumer protection law requires to
+be accurate.
+
+The fix is `getUTC*`. The comment above it always said *treat them as the
+calendar date shown in the cell*; the code just did not.
+
+**It is checked from six zones,** and the test moves the clock itself rather
+than trusting where CI happens to run: Anchorage at −9 and Kiritimati at +14
+are twenty-three hours apart, which is every offset a calendar date can be read
+under. A summer date and a winter date, too, because New York is −4 in August
+and −5 in January and a fix that only worked outside daylight saving would look
+exactly like a fix.
+
+#### The check that could not fail — again, and nearly missed
+
+The first attempt to test this ran the suite with `TZ=America/New_York` and
+reported eight passes. It had never left Dubai: Git Bash on Windows mangles an
+environment value containing a slash, so `process.env.TZ` arrived `undefined`
+and the run used the machine's own zone. `TZ=UTC` propagated fine, which is
+what made it look like the mechanism worked.
+
+A green run from a timezone the process never entered is exactly the shape this
+file has been cataloguing for four passes, and it very nearly closed the
+question in the wrong direction. What settled it was printing the zone the
+process actually resolved rather than the one it was handed.
+
+#### Why the fixtures are built from the file format
+
+The obvious way to make an `.xlsx` fixture is `write-excel-file`, the reader's
+companion writer. It is the wrong way here. The question worth asking is what a
+**date** cell becomes, and a writer by the same author, working from the same
+model of what a date is, encodes whatever the reader decodes — the test would
+round-trip cleanly with both halves wrong together.
+
+So `src/test-support/xlsx.ts` assembles real workbook bytes from the format
+itself: a ZIP of XML parts, entries stored rather than deflated, with a styles
+part carrying the date format that makes a plain number read as a date. Each
+date is written as the serial the file actually stores, and the test picks that
+serial from the anchor every implementation agrees on — 1970-01-01 is 25569.
+Nothing in `src/` participates in choosing it.
+
+#### Five branches became three, and the file got smaller
+
+Mutation testing then said something about the code rather than the tests. Of
+fifty-seven mutants, **twenty-three could not be killed because they changed
+nothing**:
+
+- `toText` had a branch for numbers returning `String(value)` and a branch for
+  booleans spelling out `'true'` — both of which the last line already did.
+  Eight mutants lived in those two branches, and no test could tell them from
+  the fallback because there is nothing to tell.
+- The sheet handling accepted **either** a bare list of rows **or**
+  `[{ sheet, data }]`, on the strength of the library's loose types. The library
+  does not produce the first — checked, for a one-sheet workbook as much as a
+  five-sheet one — so eight more mutants sat on a branch nothing can take.
+
+Both are gone. The file is thirty-four mutants now instead of fifty-seven, and
+the score went from 57.89% to 73.53% before a single test was added for it.
+
+**A dependency contract test replaces the dead branch.** The simplification is
+only safe while the library keeps answering in one shape, so the spec asserts
+that shape against the library directly. An upgrade that changes it fails there,
+with the reason written beside it, rather than failing an operator's import.
+
+#### A test that says what it does not prove
+
+One test checks that `'  A-1  '` arrives as `'A-1'`, because a SKU with a
+trailing space is a SKU that does not match the catalogue and quietly creates a
+second product. It passes with the reader's `.trim()` deleted — the library
+trims on its way out — so the test proves the requirement and says nothing about
+the reader.
+
+That is written in the test, in those words. The trim stays as a second layer at
+an untrusted boundary, and it is declared in the registry rather than left
+looking covered.
+
+#### 73.53%, and why that number is not the contract
+
+Nine mutants survive, all four entries of the same argument: this file takes
+`unknown` from a library reading a file a stranger uploaded and turns it into
+`string[][]`, and the guards that do the turning are what the type checker
+needs and the runtime cannot reach. A workbook with no sheets makes the library
+throw internally rather than return one. A gap in a row is `null`, never
+`undefined`.
+
+So the file joins the gate at 73.53% rather than at the standard the others
+reached, and the honest reason is that it is sixty lines of boundary with nine
+guards in it. The per-file percentage was never the contract — **every survivor
+declared and replayed** is, and all nine are.
+
 #### The rule underneath all of it
 
 Every gap in this pass was a check that could not fail: an assertion inside a
@@ -2429,20 +2541,21 @@ JavaScript involved.
 
   **The axe failure remains unexplained and should not be assumed to be the same
   cause.** It has not recurred, which is not the same as being gone.
-- **Two layers are measured; the third cannot be.** The domain and the
-  application layer are both inside the mutation gate now. The Mongo adapters
-  are not, and not for want of trying: their tests are integration-only, so the
-  mutation runner cannot execute them at all. `xlsx-workbook-reader.ts` has no
-  unit tests of any kind — it is the one file in `src/modules` with nothing
-  said about it.
-- **33 mutants survive across everything measured, and every one is declared.**
-  The score is 97.90% of 1,573 against a floor of 97, so it cannot regress;
-  `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%.
+- **Everything the runner can execute is measured.** The domain, the
+  application layer and `xlsx-workbook-reader.ts` are all inside the mutation
+  gate. What is left out is left out because the runner cannot reach it: the
+  Mongo adapters are tested only against a real database, so the mutation runner
+  cannot execute their tests at all. Splitting those suites so the pure parts
+  could be mutated is the next thing that would widen this, and it is a bigger
+  change than it sounds.
+- **64 mutants survive across everything measured, and every one is accounted
+  for.** The score is 97.91% of 3,060 against a floor of 97, so it cannot
+  regress; `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%.
 
   This entry used to say *every one has an argument*, and the arguments lived
   here, several hundred lines from the code. They live in
-  `scripts/check-static-mutants.mjs` now — **forty-eight declared equivalent,
-  one per entry** — and `pnpm test:mutation:static` replays all fifty-five
+  `scripts/check-static-mutants.mjs` now — **fifty-seven declared equivalent,
+  one entry per claim** — and `pnpm test:mutation:static` replays all sixty-four
   against the real suite and fails if any behaves differently from its claim.
   The other seven are static tables in `search.ts` that Stryker cannot test at
   all, and the replay proves them caught. A survivor with nothing said about it
