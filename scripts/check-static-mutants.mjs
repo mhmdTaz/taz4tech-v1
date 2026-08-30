@@ -299,6 +299,47 @@ const EQUIVALENT = [
     replay: 'survives',
     why: 'The same normalisation from the other side: testing the untrimmed length only changes the answer for notes that are all whitespace, and those are the ones createOrder turns into null anyway.',
   },
+  /*
+   * The workbook reader, which is one long narrowing.
+   *
+   * Every entry below is the same argument in a different place: this file
+   * takes `unknown` from a library reading a file a stranger uploaded, and
+   * turns it into `string[][]`. The guards that do the turning are required by
+   * the type checker and unreachable at runtime, because the library either
+   * answers in the one shape it has (checked against the library itself, in
+   * `xlsx-workbook-reader.test.ts`) or throws before any of them is asked.
+   *
+   * That is why the file scores 73.53% while every test in it passes: it is
+   * thirty-four mutants, of which nine are the boundary itself.
+   */
+  {
+    file: 'src/modules/catalog/infrastructure/xlsx-workbook-reader.ts',
+    replacement: 'false',
+    count: 4,
+    replay: 'survives',
+    why: 'The four narrowing guards. `value === undefined` never fires because the library writes null into a gap, never undefined — probed, not assumed. The other three exist so TypeScript will let `unknown` be indexed, spread and mapped: a non-array from readXlsxFile, a workbook with no sheets, and a first sheet whose `data` is not an array. The library throws on all three before returning, so none is reachable through a file.',
+  },
+  {
+    file: 'src/modules/catalog/infrastructure/xlsx-workbook-reader.ts',
+    replacement: '""',
+    count: 2,
+    replay: 'survives',
+    why: 'The two refusal messages, on throws no file can reach. They are for the day the library changes shape under an upgrade, which is also what the contract test in the spec is watching for — the test fails first, and with a better explanation.',
+  },
+  {
+    file: 'src/modules/catalog/infrastructure/xlsx-workbook-reader.ts',
+    replacement: '["Stryker was here"]',
+    count: 2,
+    replay: 'survives',
+    why: 'Two empty arrays on paths nothing reaches: the answer for a workbook with no sheets, and the answer for a row that is not an array. A workbook with no sheets makes the library throw internally rather than return one, and every row it does return is an array.',
+  },
+  {
+    file: 'src/modules/catalog/infrastructure/xlsx-workbook-reader.ts',
+    replacement: 'String(value)',
+    count: 1,
+    replay: 'survives',
+    why: 'The trim, which the library has already done. Deleting it from the reader leaves every test in the file passing — checked, which is why the test that looks like it covers this says in so many words that it does not. It stays as a second layer at an untrusted boundary, and it is declared rather than left looking tested.',
+  },
   {
     file: 'src/modules/store/application/update-store-settings.ts',
     replacement: '""',
