@@ -2435,9 +2435,9 @@ JavaScript involved.
   mutation runner cannot execute them at all. `xlsx-workbook-reader.ts` has no
   unit tests of any kind — it is the one file in `src/modules` with nothing
   said about it.
-- **33 mutants survive across everything measured, and every one is declared.**
-  The score is 97.90% of 1,573 against a floor of 97, so it cannot regress;
-  `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%.
+- **55 mutants survive across everything measured, and every one is accounted
+  for.** The score is 98.18% of 3,026 against a floor of 97, so it cannot
+  regress; `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%.
 
   This entry used to say *every one has an argument*, and the arguments lived
   here, several hundred lines from the code. They live in
