@@ -780,6 +780,74 @@ now `plan-import.ts` and `search-products.ts`), the Mongo adapters — whose tes
 are integration-only, so the mutation runner cannot execute them at all — and
 `xlsx-workbook-reader.ts`, which still has no unit tests.
 
+### The application layer, 88% to 97%
+
+The layer between the domain and the database — use cases, the importer, the
+cart pricer — had never been measured until `mutate` was pointed past
+`domain/**`. It came back at **88.35% of 1,614 mutants, 188 survivors**, and
+112 of them were outside `column-mapping.ts`.
+
+It is at **96.9%** now, with 45 left. The interesting part is what the missing
+112 turned out to be, because almost none of them were exotic.
+
+**A shop that charges the wrong price.** `variantFor` picks the variant a cart
+line names and falls back to the cheapest. Every test either named a
+single-variant product or exercised the fallback, so the lookup itself could be
+inverted — always match, never match, match the wrong one — and the customer
+would be quoted the *first* variant's price, or the *cheapest*, whichever the
+mutation chose. Undercharging, in the direction nobody reports.
+
+**A flag the cart page trusts.** `hasProblems` was asserted `false` only for an
+EMPTY cart, which is the one case where every way of computing it agrees. Three
+of its four mutants survived, including `.some` becoming `.every` — under which
+a cart is only "in trouble" when *every* line is, so the one item that has run
+out gets offered for checkout beside the ones that have not.
+
+**Columns nobody read.** The importer looks its columns up by name. Nine of them
+— both description locales, brand, barcode, the image — could have their name
+replaced with `""` and the product would import with that field silently empty.
+One wide row with every optional column populated closes all of them, because
+the failure is always the same: it imports, and the field is just missing.
+
+**And the field on a problem.** `record('compareAtPrice', …)` names the column
+the import report puts in front of the operator. Name the wrong one and they go
+and fix a column that is fine.
+
+**Boundaries, again.** Page limits, filter caps, bulk-selection caps, price
+ranges: every one had tests that stepped *past* the limit and none that landed
+on it, so `>` could become `>=` and refuse a page, a filter or a selection
+somebody was entitled to.
+
+#### One survivor was a defect, not a gap
+
+The WhatsApp message the operator sends is written as sections with `''` between
+them. `line()` filtered out every empty part — which is correct for a label a
+locale has not translated, and wrong for a deliberate blank — so **the `''`
+entries did nothing and every message went out as one unbroken paragraph.** On a
+phone that is a wall of text.
+
+Mutation testing found it the only way anything could have: those `''` could be
+replaced with any string at all and no test noticed, because nothing was
+rendering them either way. The fix is `section()` for lines and `paragraphs()`
+for blocks, so an absent label and an intended blank are no longer the same
+thing.
+
+#### What is left, and why the gate has not widened
+
+Forty-five survivors across fifteen files, none above seven. A large share are
+the shapes already argued elsewhere in this file: `x !== undefined` guards the
+type checker demands and JavaScript does not need, `?? []` fallbacks whose
+contents no caller can distinguish, and early returns made redundant by a check
+a few lines below them — `problemFor`'s out-of-stock branch is one, equivalent
+because `createStockLevel` refuses a negative count, so an out-of-stock level
+always has exactly zero on hand and both paths report the same thing.
+
+They are not declared yet, and the gate still measures `domain/**` plus three
+named files. Declaring a survivor means arguing it one at a time, and forty-five
+arguments written in one sitting is how a registry fills up with sentences
+nobody checked. That is the next piece, and it is what earns these files their
+place in the gate.
+
 #### The rule underneath all of it
 
 Every gap in this pass was a check that could not fail: an assertion inside a
@@ -2261,14 +2329,18 @@ JavaScript involved.
 
   **The axe failure remains unexplained and should not be assumed to be the same
   cause.** It has not recurred, which is not the same as being gone.
-- **The mutation gate grows a file at a time, and most of the application layer
-  is still outside it.** `column-mapping.ts` and the two media adapters have
-  joined `domain/**`; the rest of the application layer is at roughly 90% with
-  about 112 survivors, worst now `plan-import.ts` and `search-products.ts`.
-  `xlsx-workbook-reader.ts` still has no unit tests at all, and the Mongo
-  adapters cannot be measured by this runner because their tests are
-  integration-only. Each file joins the gate when it reaches the standard, so
-  the floor never has to come down to accommodate one.
+- **The application layer is at 96.9%, and still outside the gate.** It was at
+  88.35% with 188 survivors when first measured; 112 of those sat outside
+  `column-mapping.ts` and **45 remain**, spread across fifteen files with none
+  above seven. Most are shapes already argued here — type-required `!==
+  undefined` guards, `?? []` fallbacks nothing can distinguish, early returns a
+  later check makes redundant.
+
+  They are not declared yet, and that is what gates them. Forty-five equivalence
+  arguments written in one sitting is how a registry fills with sentences nobody
+  checked, so each is worth its own reading first. `xlsx-workbook-reader.ts`
+  still has no unit tests at all, and the Mongo adapters cannot be measured by
+  this runner because their tests are integration-only.
 - **33 mutants survive across everything measured, and every one is declared.**
   The score is 97.90% of 1,573 against a floor of 97, so it cannot regress;
   `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%.

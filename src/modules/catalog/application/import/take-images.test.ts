@@ -94,6 +94,14 @@ describe('taking copies of supplier images', () => {
     expect(result.products[0]?.product.media[0]?.url).toBe('/media/laptop.png');
   });
 
+  it('fetches a plain http URL, not only https', async () => {
+    // Supplier sheets are full of http. Treating only https as foreign leaves
+    // those images hotlinked from somebody else's server for ever.
+    const ing = ingestor();
+    await takeImages([planned('a', [image('http://supplier.example/a.png')])], ing);
+    expect(ing.take).toHaveBeenCalledWith('http://supplier.example/a.png');
+  });
+
   it('leaves anything that is not http alone', async () => {
     const ing = ingestor();
     await takeImages([planned('a', [image('data:image/png;base64,AAAA')])], ing);

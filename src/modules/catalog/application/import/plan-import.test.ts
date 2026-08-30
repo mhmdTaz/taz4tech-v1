@@ -184,6 +184,124 @@ describe('planImport', () => {
     expect(result.rowProblems).toEqual([]);
   });
 
+  describe('every column the importer can read', () => {
+    const WIDE = [
+      'SKU',
+      'Title',
+      'Title AR',
+      'Title FR',
+      'Description EN',
+      'Description AR',
+      'Description FR',
+      'Brand',
+      'Barcode',
+      'Weight Grams',
+      'Price',
+      'Image Src',
+      'Image Alt',
+    ];
+
+    it('reads each optional column into its own field', () => {
+      /*
+       * One wide row, because the columns are read by name and a name that is
+       * wrong reads nothing at all. Silently: the product imports, the field is
+       * simply empty, and nobody notices until a customer opens a page with no
+       * description on it.
+       */
+      const result = plan(
+        [
+          [
+            'A-1',
+            'Anker Cable',
+            'كابل انكر',
+            'Câble Anker',
+            'Two metres.',
+            'مترين.',
+            'Deux mètres.',
+            'Anker',
+            '5901234123457',
+            '250',
+            '19.00',
+            'https://s.example/a.png',
+            'A black cable',
+          ],
+        ],
+        [],
+        WIDE,
+      );
+
+      expect(result.rowProblems).toEqual([]);
+      const product = result.products[0]?.product;
+
+      expect(product?.title).toMatchObject({
+        en: 'Anker Cable',
+        ar: 'كابل انكر',
+        fr: 'Câble Anker',
+      });
+      expect(product?.description).toMatchObject({
+        en: 'Two metres.',
+        ar: 'مترين.',
+        fr: 'Deux mètres.',
+      });
+      expect(product?.brand).toBe('Anker');
+      expect(product?.variants[0]).toMatchObject({ barcode: '5901234123457', weightGrams: 250 });
+      expect(product?.media[0]).toMatchObject({
+        kind: 'image',
+        url: 'https://s.example/a.png',
+        alt: { en: 'A black cable' },
+      });
+    });
+
+    it.each([
+      ['compareAtPrice', 'Compare At Price', 'nonsense'],
+      ['status', 'Status', 'maybe'],
+      ['weightGrams', 'Weight Grams', 'heavy'],
+      ['stock', 'Stock', 'lots'],
+    ])('names %s when that column is the one that cannot be read', (field, header, bad) => {
+      // The field on a problem is what the import report puts in front of the
+      // operator. Name the wrong one and they go and fix a column that is fine.
+      const headers = ['SKU', 'Title', 'Price', header];
+      const result = plan([['A-1', 'Anker Cable', '19.00', bad]], [], headers);
+
+      expect(result.rowProblems.map((problem) => problem.field)).toEqual([field]);
+    });
+  });
+
+  describe('the option pair, the offer boundary and the missing image', () => {
+    it('needs BOTH halves of an option, and says nothing when only one is filled', () => {
+      // A name with no value is a column the sheet declares and this row does
+      // not use, which is normal in a mixed catalogue. Treated as an option it
+      // becomes a variant axis with an empty value, which the domain refuses.
+      const headers = ['SKU', 'Title', 'Price', 'Option1 Name', 'Option1 Value'];
+      const nameOnly = plan([['A-1', 'Anker Cable', '19.00', 'Length', '']], [], headers);
+      const valueOnly = plan([['B-1', 'Anker Cable', '19.00', '', '2m']], [], headers);
+
+      expect(nameOnly.rowProblems).toEqual([]);
+      expect(nameOnly.products[0]?.product.variants[0]?.options).toEqual([]);
+      expect(valueOnly.rowProblems).toEqual([]);
+      expect(valueOnly.products[0]?.product.variants[0]?.options).toEqual([]);
+    });
+
+    it('reports an offer ending at exactly this moment as already past', () => {
+      // The boundary. An offer whose expiry is now is over, not running — and
+      // `<` instead of `<=` would import it as live for the length of a tick.
+      const result = plan([
+        ['A-1', 'Anker Cable', '19.00', '', '', '', '', '25.00', NOW.toISOString().slice(0, 10)],
+      ]);
+
+      expect(result.rowProblems.map((problem) => problem.field)).toContain('offerEndsAt');
+    });
+
+    it('plans a product with no image at all', () => {
+      // The image column is optional, and reading `.url` off an absent one is
+      // the difference between a plan and a thrown TypeError mid-import.
+      const result = plan([['A-1', 'Anker Cable', '19.00', '', '', '', '', '', '']]);
+
+      expect(result.rowProblems).toEqual([]);
+      expect(result.products[0]?.product.media).toEqual([]);
+    });
+  });
+
   describe('rejections', () => {
     it('reports a missing price against the row, and keeps going', () => {
       const result = plan([
@@ -196,6 +314,20 @@ describe('planImport', () => {
       expect(result.rowProblems[0]?.field).toBe('price');
       // One bad row must not cost the operator the other 399.
       expect(result.products).toHaveLength(1);
+      expect(result.summary.rowsRejected).toBe(1);
+    });
+
+    it.each([
+      ['titleEn', ['A-1', '', '19.00', '', '', '', '', '', '']],
+      ['sku', ['', 'Anker Cable', '19.00', '', '', '', '', '', '']],
+      ['status', ['A-1', 'Anker Cable', '19.00', '', 'maybe', '', '', '', '']],
+    ])('produces no product from a row missing only %s', (_field, row) => {
+      // Each required field on its own. Together they only prove that SOME
+      // check fired; separately they prove which.
+      const result = plan([row]);
+
+      expect(result.rowProblems).not.toEqual([]);
+      expect(result.products).toEqual([]);
       expect(result.summary.rowsRejected).toBe(1);
     });
 
@@ -241,11 +373,11 @@ describe('planImport', () => {
         ['SAME', 'Logitech Mouse', '29.00', '', '', '', '', '', ''],
       ]);
 
-      const problem = result.rowProblems.find((p) => p.field === 'sku');
-      expect(problem?.row).toBe(3);
-      if (problem?.problem.tag === 'duplicate_sku') {
-        expect(problem.problem.firstSeenAtRow).toBe(2);
-      }
+      // Asserted whole: `if (problem.tag === ...)` checks nothing when the tag
+      // is wrong, which is exactly the case worth catching.
+      expect(result.rowProblems).toEqual([
+        { row: 3, field: 'sku', problem: { tag: 'duplicate_sku', firstSeenAtRow: 2 } },
+      ]);
       expect(result.products).toHaveLength(1);
     });
 
@@ -281,6 +413,11 @@ describe('planImport', () => {
 
       expect(result.mappingProblems.map((p) => p.field)).toEqual(['sku']);
       expect(result.products).toEqual([]);
+      // And it stopped: no row was parsed, so there is nothing else to report.
+      // Without the early return the operator gets the same problem 400 times.
+      expect(result.rowProblems).toEqual([]);
+      expect(result.productProblems).toEqual([]);
+      expect(result.skuConflicts).toEqual([]);
       // Every row is unusable, and saying so up front beats 400 identical errors.
       expect(result.summary.rowsRejected).toBe(1);
     });
