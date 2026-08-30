@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { detectMapping, normaliseHeader, REQUIRED_FIELDS, validateMapping } from './column-mapping';
+import {
+  detectMapping,
+  IMPORT_FIELDS,
+  type ImportField,
+  normaliseHeader,
+  REQUIRED_FIELDS,
+  validateMapping,
+} from './column-mapping';
 
 describe('normaliseHeader', () => {
   it.each([
@@ -9,6 +16,88 @@ describe('normaliseHeader', () => {
     ['Option1 Name', 'option1name'],
   ])('normalises %s', (input, expected) => {
     expect(normaliseHeader(input)).toBe(expected);
+  });
+});
+
+/**
+ * Every header spelling the importer claims to recognise, written out.
+ *
+ * NOT read from HEADER_ALIASES, and that is the whole point. A test that loops
+ * over the table it is testing passes just as happily when a spelling is wrong,
+ * because the expectation moves with the code — the same trap that let a
+ * five-megabyte upload cap be asserted as MAX_BYTES and survive being changed
+ * to five bytes.
+ *
+ * So this is a second, independent copy. Changing an alias means changing it
+ * here too, deliberately, which is the point at which somebody asks whether the
+ * supplier sheet that needed it still exists.
+ *
+ * Mutation testing found the gap: sixty-nine of these spellings were never
+ * exercised, and six fields — descriptionAr, descriptionFr, barcode,
+ * weightGrams and both option-2 columns — had their ENTIRE alias list
+ * replaceable with [] without a single test noticing.
+ */
+const EXPECTED_ALIASES: readonly (readonly [ImportField, readonly string[]])[] = [
+  ['slug', ['slug', 'handle', 'urlkey', 'url']],
+  ['titleEn', ['titleen', 'title', 'productname', 'name', 'product']],
+  ['titleAr', ['titlear', 'arabictitle', 'namear', 'arabicname']],
+  ['titleFr', ['titlefr', 'frenchtitle', 'namefr', 'frenchname']],
+  ['descriptionEn', ['descriptionen', 'bodyhtml', 'longdescription', 'details']],
+  ['descriptionAr', ['descriptionar', 'arabicdescription']],
+  ['descriptionFr', ['descriptionfr', 'frenchdescription']],
+  ['brand', ['brand', 'vendor', 'manufacturer', 'make']],
+  ['status', ['status', 'published', 'active']],
+  ['sku', ['sku', 'variantsku', 'itemcode', 'itemnumber', 'partnumber', 'mpn', 'code']],
+  ['compareAtPrice', ['compareatprice', 'compareprice', 'wasprice', 'rrp', 'listprice', 'msrp']],
+  ['price', ['price', 'variantprice', 'sellingprice', 'unitprice', 'retailprice']],
+  ['offerEndsAt', ['offerendsat', 'offerend', 'saleends', 'promotionends', 'validuntil']],
+  ['barcode', ['barcode', 'ean', 'upc', 'gtin']],
+  ['weightGrams', ['weightgrams', 'weightg', 'grams', 'weight']],
+  ['option1Name', ['option1name', 'optionname1', 'attribute1name']],
+  ['option1Value', ['option1value', 'optionvalue1', 'attribute1value']],
+  ['option2Name', ['option2name', 'optionname2', 'attribute2name']],
+  ['option2Value', ['option2value', 'optionvalue2', 'attribute2value']],
+  ['imageUrl', ['imageurl', 'imagesrc', 'image', 'photo', 'picture']],
+  ['imageAlt', ['imagealt', 'imagealttext', 'alt', 'alttext']],
+  ['stock', ['stock', 'quantity', 'qty', 'onhand', 'stocklevel', 'inventory', 'available']],
+];
+
+describe('the header spellings it recognises', () => {
+  it.each(EXPECTED_ALIASES.flatMap(([field, aliases]) => aliases.map((alias) => [alias, field])))(
+    'reads a column headed "%s" as %s',
+    (alias, field) => {
+      // One header, so nothing else can claim the column: this asserts the
+      // alias belongs to this field and to no other.
+      expect(detectMapping([alias as string])[field as ImportField]).toBe(0);
+    },
+  );
+
+  it('covers every field the importer can map', () => {
+    // A field added to IMPORT_FIELDS without spellings here would otherwise be
+    // undetectable and untested at the same time.
+    expect(EXPECTED_ALIASES.map(([field]) => field).sort()).toEqual([...IMPORT_FIELDS].sort());
+  });
+
+  it('gives no spelling to two different fields', () => {
+    /*
+     * The invariant the claim-tracking rests on.
+     *
+     * detectMapping refuses to hand one column to two fields, and with no
+     * shared spelling that guard can never fire — a header matches at most one
+     * alias, so at most one field wants it. Add "price" to compareAtPrice and
+     * it fires immediately, which is the day this test tells you to go and
+     * read it rather than the day a Shopify import prices everything at its
+     * was-price.
+     */
+    const seen = new Map<string, ImportField>();
+    for (const [field, aliases] of EXPECTED_ALIASES) {
+      for (const alias of aliases) {
+        expect(seen.get(alias), `"${alias}" is claimed by ${seen.get(alias)} and ${field}`).toBe(
+          undefined,
+        );
+        seen.set(alias, field);
+      }
+    }
   });
 });
 

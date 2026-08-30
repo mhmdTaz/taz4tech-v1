@@ -718,6 +718,66 @@ widened once it is done rather than widened and then apologised for.
 The two adapters fixed here keep their tests either way. What they do not yet
 have is a gate watching them, and that is the next thing worth doing.
 
+### The importer's column mapping, from 54% to 99%
+
+`column-mapping.ts` was the weakest file in the codebase, and the reason is one
+line of arithmetic: it holds **91 header spellings** across 22 fields, and the
+tests exercised fourteen of them.
+
+Sixty-nine spellings could be replaced with nonsense and nothing failed. Six
+fields — `descriptionAr`, `descriptionFr`, `barcode`, `weightGrams` and both
+option-2 columns — had their **entire alias list** replaced with `[]` without a
+single test noticing. A supplier sheet headed *EAN* or *Grams* would silently
+stop mapping, and the operator would find out by mapping it by hand.
+
+The table is now written out in the test, all 91, and asserted one at a time.
+
+**It is deliberately a second copy, not a loop over `HEADER_ALIASES`.** A test
+that reads the table it is testing passes just as happily when a spelling is
+wrong, because the expectation moves with the code — the same trap that let a
+five-megabyte upload cap be asserted as `MAX_BYTES` and survive being changed to
+five bytes. Changing an alias now means changing it in two places, which is the
+moment somebody asks whether the sheet that needed it still exists.
+
+#### One survivor, and it is protection worth keeping
+
+`claimed.add(index)` cannot be killed. No spelling belongs to two fields — a new
+test asserts exactly that — so a header matches at most one alias, at most one
+field ever wants a given column, and the claim-tracking never fires.
+
+It stays. Add `price` to `compareAtPrice` tomorrow and it fires immediately;
+without it both fields take the same column and every Shopify import prices its
+products at the was-price. **The guard is unreachable because of an invariant,
+and the invariant is now the thing being tested** — so the day it breaks, the
+test says so rather than the importer doing it quietly.
+
+### The gate now grows a file at a time
+
+`mutate` was `src/modules/*/domain/**` and nothing else. Widening it to the whole
+application layer is still blocked — 88% across 1,614 mutants — but waiting for
+all of it means the files brought up to standard are not watched, and an
+unwatched 91-row table is one nobody will notice rotting.
+
+So the scope is an explicit list that grows as files reach the standard.
+`column-mapping.ts` joins it here, along with the two media adapters closed in
+the previous change:
+
+| | |
+| --- | ---: |
+| `src/modules/*/domain/**` | 97.8% |
+| `column-mapping.ts` | 99.4% |
+| `http-image-fetcher.ts` | 97% |
+| `r2-image-repository.ts` | 96% |
+
+**97.90% of 1,573 mutants, against a floor of 97** — the number went up, which
+is the only direction this one has ever moved. Every one of the 33 survivors is
+declared and replayed.
+
+What is still outside: the rest of the application layer (~112 survivors, worst
+now `plan-import.ts` and `search-products.ts`), the Mongo adapters — whose tests
+are integration-only, so the mutation runner cannot execute them at all — and
+`xlsx-workbook-reader.ts`, which still has no unit tests.
+
 #### The rule underneath all of it
 
 Every gap in this pass was a check that could not fail: an assertion inside a
@@ -2071,17 +2131,17 @@ conflict still throws: a dropped connection must never be reported as
 
   **The axe failure remains unexplained and should not be assumed to be the same
   cause.** It has not recurred, which is not the same as being gone.
-- **The mutation gate only measures `domain/`, and the application layer is at
-  88%.** Pointing it further found two adapters with no unit tests at all;
-  `http-image-fetcher.ts` and `r2-image-repository.ts` are fixed and at 97% and
-  96%, `xlsx-workbook-reader.ts` is still at 0%. Across every application layer
-  it is **88.35% of 1,614 mutants, 188 survivors**, worst of them
-  `column-mapping.ts` at 54% — the code that decides which spreadsheet column
-  means what. Widening `mutate` is earned by closing those first; doing it now
-  would mean lowering a floor that has only ever moved up.
-- **28 mutants survive on the domain layer, and every one of them is now
-  declared.** The score is 97.78% of 1,263 against a floor of 97, so it cannot
-  regress; `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%.
+- **The mutation gate grows a file at a time, and most of the application layer
+  is still outside it.** `column-mapping.ts` and the two media adapters have
+  joined `domain/**`; the rest of the application layer is at roughly 90% with
+  about 112 survivors, worst now `plan-import.ts` and `search-products.ts`.
+  `xlsx-workbook-reader.ts` still has no unit tests at all, and the Mongo
+  adapters cannot be measured by this runner because their tests are
+  integration-only. Each file joins the gate when it reaches the standard, so
+  the floor never has to come down to accommodate one.
+- **33 mutants survive across everything measured, and every one is declared.**
+  The score is 97.90% of 1,573 against a floor of 97, so it cannot regress;
+  `store`, `media`, `inventory` and `bulk-edit.ts` are at 100%.
 
   This entry used to say *every one has an argument*, and the arguments lived
   here, several hundred lines from the code. They live in

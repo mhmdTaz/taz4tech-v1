@@ -131,6 +131,21 @@ export const detectMapping = (headers: readonly string[]): ColumnMapping => {
     'stock',
   ];
 
+  /*
+   * `claimed` cannot fire today, and is kept because of what it costs when it
+   * can.
+   *
+   * No spelling appears in two fields — a test asserts that — so a header
+   * matches at most one alias and at most one field ever wants a given column.
+   * Mutation testing reports the `claimed.add` as unkillable for exactly that
+   * reason, and it is right: there is no sheet that distinguishes it.
+   *
+   * Add "price" to compareAtPrice tomorrow and it fires immediately. Without
+   * it, both fields would take the same column and every Shopify import would
+   * price its products at the was-price. The guard costs one Set; the day it
+   * becomes reachable is the day it is load-bearing, and nobody will be
+   * thinking about it then.
+   */
   for (const field of order) {
     for (const alias of HEADER_ALIASES[field]) {
       const index = normalised.indexOf(alias);
