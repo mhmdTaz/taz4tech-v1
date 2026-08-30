@@ -269,6 +269,18 @@ describe('listing orders', () => {
     expect(list.mock.calls[0]?.[0]).toMatchObject({ status: 'pending' });
   });
 
+  it('omits the status key when no status was asked for', async () => {
+    /*
+     * Absent, not present-and-undefined — the same distinction the cursor makes
+     * below, and it matters for the same reason: an undefined value reaching a
+     * Mongo filter is a filter for null, which matches no order at all. The
+     * unfiltered orders screen is the one that would go empty.
+     */
+    const { list, run } = lister();
+    await run({});
+    expect(list.mock.calls[0]?.[0]).not.toHaveProperty('status');
+  });
+
   it('omits an empty cursor rather than paging from nowhere', async () => {
     const { list, run } = lister();
     await run({ cursor: '' });

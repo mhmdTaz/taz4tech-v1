@@ -167,6 +167,43 @@ describe('toImportReport', () => {
     expect(result.products[1]?.translatedInto).toEqual(['en']);
   });
 
+  it('names all THREE locales, French included', () => {
+    /*
+     * The shop sells in three languages and the shared headers above carry two,
+     * so every other test here would pass with French missing from the list the
+     * nudge is built from. A row that IS translated into French and does not say
+     * so tells the operator to go and translate it again.
+     */
+    const headers = ['SKU', 'Title', 'Title AR', 'Title FR', 'Price'];
+    const rows = [headers, ['A-1', 'Anker Cable', 'كابل انكر', 'Câble Anker', '19.99']];
+    const mapping = detectMapping(headers);
+
+    idCounter = 0;
+    const result = toImportReport({
+      headers,
+      rows,
+      mapping,
+      plan: planImport({
+        rows,
+        mapping,
+        storeId: 'taz4tech',
+        now: NOW,
+        existingBySlug: new Map(),
+        ownerSlugBySku: new Map(),
+        nextId,
+      }),
+      committed: false,
+      written: 0,
+      failures: [],
+      stockFailures: [],
+      stockWritten: 0,
+      imageFailures: [],
+      imagesTaken: 0,
+    });
+
+    expect(result.products[0]?.translatedInto).toEqual(['en', 'ar', 'fr']);
+  });
+
   it('counts images without carrying the media objects', () => {
     const result = report([
       row('A-1', 'Anker Cable', '19.99', { imageUrl: 'https://cdn.example/a.jpg' }),

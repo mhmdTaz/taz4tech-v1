@@ -114,6 +114,17 @@ export const makePlaceOrder =
     const region: Region = input.region;
 
     /*
+     * Trimmed ONCE, here, because two places need the same answer.
+     *
+     * The order is written under this key and the recovery below looks the order
+     * up by it. Trimming in only one of them means a double-tap that sends " k "
+     * is refused by the unique index — which holds the trimmed "k" — and then
+     * fails to find the order it collided with, so the customer gets an error
+     * instead of the order they already placed.
+     */
+    const idempotencyKey = input.idempotencyKey.trim();
+
+    /*
      * Priced HERE, from the catalogue, moments before the order is written.
      *
      * The cart cookie carries SKUs and quantities and no money at all, so this
@@ -153,6 +164,7 @@ export const makePlaceOrder =
       priced,
       phone: phone.value,
       region,
+      idempotencyKey,
       now,
       sequence,
     });
@@ -176,10 +188,7 @@ export const makePlaceOrder =
     await giveBack(deps, taken);
 
     if (saved.error.tag === 'duplicate_checkout') {
-      const existing = await deps.repository.findByIdempotencyKey(
-        deps.storeId,
-        input.idempotencyKey,
-      );
+      const existing = await deps.repository.findByIdempotencyKey(deps.storeId, idempotencyKey);
       if (existing !== null) return ok(existing);
     }
 
@@ -194,10 +203,11 @@ const buildOrder = async (context: {
   priced: Awaited<ReturnType<PriceCart>>;
   phone: string;
   region: Region;
+  idempotencyKey: string;
   now: Date;
   sequence: number;
 }): Promise<Result<Order, PlaceOrderError>> => {
-  const { deps, input, priced, phone, region, now, sequence } = context;
+  const { deps, input, priced, phone, region, idempotencyKey, now, sequence } = context;
 
   const feeCents = await deps.deliveryFeeCents(region);
   /*
@@ -239,7 +249,7 @@ const buildOrder = async (context: {
     subtotal,
     deliveryFee,
     total: money(subtotal.cents + deliveryFee.cents),
-    idempotencyKey: input.idempotencyKey.trim(),
+    idempotencyKey,
     viewToken: deps.nextViewToken(),
     placedAt: now,
     updatedAt: now,

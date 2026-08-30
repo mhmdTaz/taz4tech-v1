@@ -132,11 +132,23 @@ describe('importProducts', () => {
     const result = await importer(repo, reader(SHEET))({ file });
 
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.committed).toBe(false);
-      expect(result.value.written).toBe(0);
-      expect(result.value.plan.products).toHaveLength(2);
-    }
+    if (!result.ok) throw new Error(`expected a preview, got ${result.error.tag}`);
+    expect(result.value.committed).toBe(false);
+    expect(result.value.written).toBe(0);
+    expect(result.value.plan.products).toHaveLength(2);
+
+    /*
+     * And nothing failed, because nothing was attempted. These three are what
+     * the preview screen counts to decide whether to show a problems panel at
+     * all, so a dry run that reported a failure it invented would send the
+     * operator looking for a row that is perfectly fine.
+     */
+    expect(result.value.failures).toEqual([]);
+    expect(result.value.stockFailures).toEqual([]);
+    expect(result.value.imageFailures).toEqual([]);
+    expect(result.value.stockWritten).toBe(0);
+    expect(result.value.imagesTaken).toBe(0);
+
     expect(saved).toEqual([]);
     expect(repo.save).not.toHaveBeenCalled();
   });
@@ -303,6 +315,9 @@ describe('importProducts', () => {
 
     expect(result.ok).toBe(true);
     expect(repo.findBySlugs).not.toHaveBeenCalled();
+    // Both lookups, not just the first. An empty `$in` is a round trip to Mongo
+    // for a set it has already been told is empty.
+    expect(repo.findBySkus).not.toHaveBeenCalled();
   });
 
   it('surfaces a mapping problem instead of importing nonsense', async () => {

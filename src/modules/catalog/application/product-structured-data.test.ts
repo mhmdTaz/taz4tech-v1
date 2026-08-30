@@ -276,6 +276,12 @@ describe('the breadcrumb trail', () => {
 
     expect(data['@context']).toBe('https://schema.org');
     expect(data['@type']).toBe('BreadcrumbList');
+
+    // And every ENTRY is a ListItem. A BreadcrumbList whose entries are not
+    // typed is dropped whole, and it looks correct in the page source while it
+    // is being dropped — the same silent failure as a relative `item` below.
+    const items = data.itemListElement as { '@type': string }[];
+    expect(items.map((item) => item['@type'])).toEqual(['ListItem', 'ListItem', 'ListItem']);
   });
 
   it('numbers the positions from ONE, not zero', () => {

@@ -82,7 +82,15 @@ describe('listProducts', () => {
   it('returns every status for an admin caller that asks for it', async () => {
     const { repo, calls } = repository();
     await listFor(repo)({ includeUnpublished: true });
-    expect(calls[0]?.status).toBeUndefined();
+
+    /*
+     * The KEY is absent, not present and undefined — the same distinction the
+     * cursor makes below. `toBeUndefined` alone passes either way, and the two
+     * are not the same thing at the far end: an undefined value in a Mongo
+     * filter is a filter for null, which matches no product and empties the one
+     * screen whose whole job is to show the drafts.
+     */
+    expect(Object.hasOwn(calls[0] ?? {}, 'status')).toBe(false);
   });
 
   it('lets an admin caller filter to one status', async () => {

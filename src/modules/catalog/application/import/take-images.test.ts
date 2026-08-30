@@ -107,6 +107,23 @@ describe('taking copies of supplier images', () => {
     await takeImages([planned('a', [image('data:image/png;base64,AAAA')])], ing);
     expect(ing.take).not.toHaveBeenCalled();
   });
+
+  it('leaves an SVG data URI alone, though it MENTIONS http', async () => {
+    /*
+     * Every SVG carries `xmlns="http://www.w3.org/2000/svg"`, so a data URI
+     * holding one contains the scheme without starting with it. Matching the
+     * scheme anywhere in the string rather than at the front sends this to the
+     * fetcher, which would then be asked to make an HTTP request for a `data:`
+     * URL — the anchor is doing the work, not the alternation.
+     */
+    const ing = ingestor();
+    const svg = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="1"/>';
+    const result = await takeImages([planned('a', [image(svg)])], ing);
+
+    expect(ing.take).not.toHaveBeenCalled();
+    expect(result.products[0]?.product.media[0]?.url).toBe(svg);
+    expect(result.taken).toBe(0);
+  });
 });
 
 describe('a sheet that reuses one photograph', () => {

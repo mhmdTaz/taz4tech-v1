@@ -128,6 +128,12 @@ describe('placing an order', () => {
     expect(order.lines).toHaveLength(1);
   });
 
+  it('stores the idempotency key trimmed', async () => {
+    // A hidden form field that picked up a newline is still the same checkout.
+    const order = await placed(placer(), { idempotencyKey: '  checkout-1  ' });
+    expect(order.idempotencyKey).toBe('checkout-1');
+  });
+
   it('normalises the phone number on the way in', async () => {
     // The phone number is the customer identity. Two records for one customer
     // because one was typed "03 123 456" is the failure this prevents.
@@ -373,7 +379,19 @@ describe('taking the stock', () => {
 
   it('gives stock back when the order itself turns out invalid', async () => {
     const harness = placer();
-    await harness.place(input({ city: '   ' }));
+    const result = await harness.place(input({ city: '   ' }));
+
+    /*
+     * The refusal carried WHOLE, reason included. This is the one path where a
+     * rule the application layer does not check gets to refuse an order, and the
+     * page that renders it needs to know which rule — "something was wrong with
+     * your order" on a checkout form is a customer who cannot proceed and cannot
+     * tell why.
+     */
+    expect(result).toEqual({
+      ok: false,
+      error: { tag: 'invalid', reason: { tag: 'city_empty' } },
+    });
 
     expect(harness.take).toHaveBeenCalledWith('SKU-1', 2);
     expect(harness.giveBack).toHaveBeenCalledWith('SKU-1', 2);
@@ -414,6 +432,28 @@ describe('a double-tapped checkout', () => {
     // disagreeing is a fault, not an outcome a customer should be shown.
     await expect(placer({ repository: repo }).place(input())).rejects.toThrow(/duplicate_number/);
     expect(findByIdempotencyKey).not.toHaveBeenCalled();
+  });
+
+  it('writes and looks up the SAME key, whitespace and all', async () => {
+    /*
+     * The key is trimmed before the order is written, so the unique index holds
+     * the trimmed one. The recovery read has to ask for that same value: asking
+     * with the padding still on finds nothing, and the double-tap this whole
+     * branch exists to rescue ends in an exception instead of an order.
+     */
+    const existing = { number: 'T4T-26-000041' } as Order;
+    const findByIdempotencyKey = vi.fn(async () => existing);
+    const repo = repository({
+      save: vi.fn(async () => err({ tag: 'duplicate_checkout' as const, idempotencyKey: 'k' })),
+      findByIdempotencyKey,
+    });
+
+    const result = await placer({ repository: repo }).place(
+      input({ idempotencyKey: '  checkout-1  ' }),
+    );
+
+    expect(result).toEqual({ ok: true, value: existing });
+    expect(findByIdempotencyKey).toHaveBeenCalledWith('taz4tech', 'checkout-1');
   });
 
   it('gives back the stock the second attempt took', async () => {
