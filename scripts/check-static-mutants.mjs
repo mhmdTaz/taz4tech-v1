@@ -146,6 +146,41 @@ const EQUIVALENT = [
     replay: 'survives',
     why: 'The two catch blocks. Emptying either leaves the value undefined rather than EMPTY_CART or null, and every path from there ends at the same empty cart — Array.isArray(undefined) is false, and JSON.parse(undefined) throws into the outer catch.',
   },
+  {
+    file: 'src/modules/catalog/application/import/column-mapping.ts',
+    replacement: ';',
+    count: 1,
+    replay: 'survives',
+    why: 'The claim-tracking cannot fire while no header spelling belongs to two fields, which a test asserts — a header matches at most one alias, so at most one field ever wants a column. It is kept because the day somebody adds "price" to compareAtPrice it stops being unreachable and starts being the thing that prevents every Shopify import pricing its products at the was-price.',
+  },
+  {
+    file: 'src/modules/media/infrastructure/http-image-fetcher.ts',
+    replacement: '"Stryker was here!"',
+    count: 1,
+    replay: 'survives',
+    why: 'The trailing empty-string fallback on split(";")[0]?.trim(). String.split always returns at least one element, so the index is never undefined, the optional chain never short-circuits and the fallback is unreachable. It exists for noUncheckedIndexedAccess, which types the access as possibly undefined.',
+  },
+  {
+    file: 'src/modules/media/infrastructure/http-image-fetcher.ts',
+    replacement: "(header ?? '').split(';')[0].trim",
+    count: 1,
+    replay: 'survives',
+    why: 'The same optional chain, from the other side: `[0]` is never undefined, so `?.` and `.` behave identically.',
+  },
+  {
+    file: 'src/modules/media/infrastructure/r2-image-repository.ts',
+    replacement: '"Stryker was here!"',
+    count: 1,
+    replay: 'survives',
+    why: 'The same unreachable trailing fallback as the fetcher, on the same expression shape.',
+  },
+  {
+    file: 'src/modules/media/infrastructure/r2-image-repository.ts',
+    replacement: "(response.headers.get('content-type') ?? '').split(';')[0].trim",
+    count: 1,
+    replay: 'survives',
+    why: 'The same optional chain as the fetcher, on the same expression shape.',
+  },
 ];
 
 const entryFor = (file, mutant) =>

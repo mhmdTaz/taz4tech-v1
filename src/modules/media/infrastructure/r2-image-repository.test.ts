@@ -135,6 +135,22 @@ describe('findById', () => {
     await expect(repository().findById('taz4tech', ID)).rejects.toThrow(/not an image/);
   });
 
+  it('refuses an object with no content type at all', async () => {
+    // R2 will happily store an object without one. Absent, it is not a type
+    // this shop stores, and the storefront gets an error rather than bytes it
+    // cannot label.
+    const response = new Response(BYTES, { status: 200 });
+    response.headers.delete('content-type');
+    stub(response);
+
+    // The message names what it actually got, empty included. Without that the
+    // assertion passes for any wrong type at all, which is no assertion about
+    // the missing-header case in particular.
+    await expect(repository().findById('taz4tech', ID)).rejects.toThrow(
+      /is not an image this shop stores: ""/,
+    );
+  });
+
   it('trims the type when the space is before the semicolon', async () => {
     // Headers normalises whitespace at the ends of a value, so a padded header
     // never reaches the trim. This one does.

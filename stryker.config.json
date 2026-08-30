@@ -11,7 +11,13 @@
     "fileName": "stryker-report/index.html"
   },
   "coverageAnalysis": "perTest",
-  "mutate": ["src/modules/*/domain/**/*.ts", "!src/modules/*/domain/**/*.test.ts"],
+  "mutate": [
+    "src/modules/*/domain/**/*.ts",
+    "src/modules/catalog/application/import/column-mapping.ts",
+    "src/modules/media/infrastructure/http-image-fetcher.ts",
+    "src/modules/media/infrastructure/r2-image-repository.ts",
+    "!src/modules/**/*.test.ts"
+  ],
   "thresholds": {
     "high": 99,
     "low": 97,
